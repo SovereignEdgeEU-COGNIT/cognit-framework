@@ -671,6 +671,10 @@ module.exports = {
     'Minimize contention and balance computing capacity by cluster to deliver optimized performance for hosts and virtual machines',
   PolicyPack:
     'Optimize power consumption or hybrid cloud cost dynamically. If the overall workload decreases, some of the physical servers can be temporarily powered-down (stopped if hybrid) and the workload consolidated.',
+  PolicyEnergy:
+    'Optimize energy consumption using information about host energy efficiency. If the overall workload decreases, some of the physical servers can be temporarily powered-down.',
+  PolicyContention:
+    'Minimize CPU contention considering the number of physical CPUs available for each host',
   AutomationEnabled: 'Automation is enabled. Manual actions are disabled.',
   /* Balance Weight Tooltips */
   CpuUsageWeightConcept:

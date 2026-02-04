@@ -3,6 +3,7 @@
 from collections import defaultdict as ddict
 from collections.abc import Collection, Mapping
 from itertools import chain, combinations
+from math import isnan as _is_nan
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union
 
 import pulp
@@ -51,6 +52,7 @@ class ILPOptimizer(Mapper):
         "_affined_vms",
         "_affined_vm_groups",
         "_anti_affined_vm_groups",
+        "_vm_cluster_groups",
         "_host_caps",
         "_dstore_caps",
         "_vnet_caps",
@@ -81,6 +83,9 @@ class ILPOptimizer(Mapper):
         "_n_migr",
         "_n_migr_ub",
         "_max_n_migr_vms",
+        "_satisfaction",
+        "_energy",
+        "_energy_constraint",
         "_opt_placement",
     )
 
@@ -92,6 +97,7 @@ class ILPOptimizer(Mapper):
         _affined_vms: dict[int, int]
         _affined_vm_groups: dict[int, VMGroup]
         _anti_affined_vm_groups: dict[int, VMGroup]
+        _vm_cluster_groups: list[list[int]]
         _host_caps: dict[int, HostCapacity]
         _dstore_caps: dict[int, DStoreCapacity]
         _vnet_caps: dict[int, VNetCapacity]
@@ -122,6 +128,9 @@ class ILPOptimizer(Mapper):
         _n_migr: dict[int, Union[LinExpr, float]]
         _n_migr_ub: Optional[int]
         _max_n_migr_vms: int
+        _satisfaction: Optional[Var]
+        _energy: dict[int, LinExpr]
+        _energy_constraint: Optional[float]
         _opt_placement: dict[int, Optional[Allocation]]
 
     def __init__(
@@ -136,6 +145,7 @@ class ILPOptimizer(Mapper):
         used_shared_dstores: Mapping[tuple[int, int], int],
         vm_requirements: Collection[VMRequirements],
         vm_groups: Collection[VMGroup],
+        vm_cluster_groups: Collection[Collection[int]],
         host_capacities: Collection[HostCapacity],
         dstore_capacities: Collection[DStoreCapacity],
         vnet_capacities: Collection[VNetCapacity],
@@ -143,6 +153,7 @@ class ILPOptimizer(Mapper):
         # migrations: Optional[bool] = None,
         allowed_migrations: Optional[int] = None,
         balance_constraints: Optional[Mapping[str, float]] = None,
+        energy_constraint: Optional[float] = None,
         preemptive: bool = False,
         **kwargs
     ) -> None:
@@ -232,6 +243,9 @@ class ILPOptimizer(Mapper):
             names = self._balance_constraints.keys() - balanced_vars
             raise ValueError(f"'balance_constraints' {names} are not allowed")
 
+        # Energy constraint.
+        self._energy_constraint = energy_constraint
+
         # Mapping criteria.
         balance_criteria = {f'{name}_balance' for name in balanced_vars}
         if isinstance(criteria, Mapping):
@@ -302,6 +316,10 @@ class ILPOptimizer(Mapper):
             affined_vm_matches |= vmg_.find_host_matches(
                 vm_requirements, host_capacities, vnet_capacities, free
             )
+
+        # VM cluster groups are the collections of the IDs that must be
+        # be allocated to the same cluster.
+        self._vm_cluster_groups = [list(vmg) for vmg in vm_cluster_groups]
 
         # Suitable VM requirements and PCI devices.
         pcid_matches: list[PCIDeviceMatch] = []
@@ -398,6 +416,10 @@ class ILPOptimizer(Mapper):
         self._n_migr: dict[int, Union[LinExpr, float]] = {}
         # Maximal possible number of migrations for all VMs.
         self._max_n_migr_vms: int = 0
+        # Overall fuzzy satisfaction decision variable.
+        self._satisfaction = None
+        # Dict {host_id: energy_consumption}.
+        self._energy: dict[int, LinExpr] = {}
         # Optimization result with {VM ID: Allocation} placements.
         self._opt_placement: dict[int, Optional[Allocation]] = {}
 
@@ -512,9 +534,8 @@ class ILPOptimizer(Mapper):
             #     continue
             if (vm_id, req_id) in used_shared_dstores:
                 dstore_id = used_shared_dstores[vm_id, req_id]
-                if dstore_id in set(dstore_match.shared_dstores):
-                    x_next_dstore_shared[vm_id, req_id, dstore_id] = 1.0
-                    continue
+                x_next_dstore_shared[vm_id, req_id, dstore_id] = 1.0
+                continue
             for host_id, disk_ids in dstore_match.host_dstores.items():
                 for disk_id in disk_ids:
                     x_name_idx = f"{vm_id}_{req_id}_{host_id}_{disk_id}"
@@ -825,13 +846,20 @@ class ILPOptimizer(Mapper):
         # denotes if the VM is allocated to any host that is a part of
         # cluster.
         x_cluster: dict[tuple[int, int], LinExpr] = {}
+        # Dict {vm_id: set[cluster_id]}, with the IDs of all the
+        # clusters where the VM can be allocated.
+        all_vm_clusters: dict[int, set[int]] = {}
         for vm_id, host_caps in vm_host_matches.items():
+            vm_clusters: set[int] = set()
+            all_vm_clusters[vm_id] = vm_clusters
             for host_cap in host_caps:
-                # TODO: Reconsider the application of `dict.setdefault`.
+                # TODO: Reconsider the application of `dict.setdefault`
+                # or `collections.defaultdict`.
                 alloc = (vm_id, host_cap.cluster_id)
                 if alloc not in x_cluster:
                     x_cluster[alloc] = LinExpr()
                 x_cluster[alloc] += x_next[vm_id, host_cap.id]
+                vm_clusters.add(host_cap.cluster_id)
 
         # A storage requirement of a VM can be satisfied with a
         # datastore only if that VM is allocated to a host that is a
@@ -860,6 +888,23 @@ class ILPOptimizer(Mapper):
                 x_vnet_var <= x_cluster_sum,
                 f"vm_{vm_id}_nic_{nic_id}_vnet_{vnet_id}_cluster_constraint"
             )
+
+        # All VMs for the same VM cluster group must be allocated to the
+        # same cluster or not allocated at all.
+        for vm_cluster_group in self._vm_cluster_groups:
+            vmg_iter = iter(vm_cluster_group)
+            vm_id_l = next(vmg_iter)
+            for vm_id_r in vmg_iter:
+                cluster_ids_l = all_vm_clusters[vm_id_l]
+                cluster_ids_r = all_vm_clusters[vm_id_r]
+                common_cluster_ids = cluster_ids_l & cluster_ids_r
+                for cluster_id in common_cluster_ids:
+                    model += (
+                        x_cluster[vm_id_l, cluster_id]
+                        == x_cluster[vm_id_r, cluster_id],
+                        f"vms_{vm_id_l}_and_{vm_id_r}_same_cluster_"
+                        f"{cluster_id}_constraint"
+                    )
 
         if self._n_migr_ub is not None:
             model += (
@@ -959,14 +1004,157 @@ class ILPOptimizer(Mapper):
         self._model.sense = _MIN
         self._model += obj + pend_penalty + migr_penalty * 0.01
 
+    def _add_energy(self) -> None:
+        model = self._model
+        all_host_caps = self._host_caps
+        x_next = self._x_next
+        y = self._y
+        energy = self._energy
+        narrow = self._narrow
+
+        for host_id, vm_reqs in self._host_vm_matches.items():
+            host = all_host_caps[host_id]
+            host_cpu = LinExpr()
+            host_energy = LinExpr()
+            energy[host_id] = host_energy
+            breakpoints = host.energy
+            if not breakpoints or len(breakpoints) == 1:
+                continue
+                # raise ValueError(
+                #     f"'breakpoints' for the host {host_id} is incorrect: a "
+                #     "list with at least two items is expected if the energy "
+                #     "consumption is used in the objective or in a constraint"
+                # )
+            breakpoints = sorted(breakpoints)
+            zip_ = zip(breakpoints[:-1], breakpoints[1:])
+            seg_inds: list[Var] = []
+
+            # Iterate through the segments:
+            for i, ((l_cpu, l_energy), (r_cpu, r_energy)) in enumerate(zip_):
+                name = f"host_{host_id}_segment_{i}_"
+                seg_ind = Var(name=f"{name}_indicator", cat="Binary")
+                seg_inds.append(seg_ind)
+                seg_weight = Var(name=f"{name}_weight", lowBound=0)
+                model += (
+                    seg_weight <= seg_ind,
+                    f"{name}_weight_constraint"
+                )
+                d_cpu = r_cpu - l_cpu
+                host_cpu += seg_ind * l_cpu + seg_weight * d_cpu
+                d_energy = r_energy - l_energy
+                host_energy += seg_ind * l_energy + seg_weight * d_energy
+
+            model += (
+                sum_(seg_inds) == y[host_id],
+                f"host_{host_id}_cpu_usage_piecewise_segments_constraint"
+            )
+            host_cpu_usage = sum_(
+                vm_req.cpu_usage * x_next[vm_req.id, host_id]
+                for vm_req in vm_reqs
+            )
+            if narrow:
+                host_cpu_usage += host.cpu_usage
+            model += (
+                host_cpu_usage == host_cpu,
+                f"host_{host_id}_cpu_usage_piecewise_balance_constraint"
+            )
+            # NOTE: This `dict` does not contain the energy consumption
+            # of the hosts that match neither VM. Therefore, it probably
+            # is not convenient for the energy constraint in the
+            # narrow initial placement case.
+            energy[host_id] = host_energy
+
+        if self._energy_constraint is not None:
+            model += (
+                sum_(energy.values()) <= self._energy_constraint,
+                "energy_constraint"
+            )
+
+    def _add_energy_satisfaction(
+        self, energy_lb: float, energy_ub: float
+    ) -> None:
+        name = "energy_satisfaction"
+        energy_mu = Var(name=name, lowBound=0, upBound=1)
+        energy = sum_(self._energy.values())
+        self._model += (
+            energy_mu <= (energy_ub - energy) / (energy_ub - energy_lb),
+            f"{name}_constraint"
+        )
+        self._model += (
+            energy_mu >= self._satisfaction,
+            f"overall_{name}_constraint"
+        )
+
+    def _add_ghg_emission_objective(self) -> None:
+        # TODO: Consider migration penalties here.
+        all_host_caps = self._host_caps
+        self._model += sum_(
+            all_host_caps[host_id].carbon_intensity * energy_consumption
+            for host_id, energy_consumption in self._energy.items()
+        )
+
+    def _add_contention_objective(self) -> None:
+        model = self._model
+        all_host_caps = self._host_caps
+        host_vm_matches = self._host_vm_matches
+        x_next = self._x_next
+        if self._satisfaction is None:
+            satisfaction = Var(name="satisfaction", lowBound=0, upBound=1)
+            self._satisfaction = satisfaction
+        else:
+            satisfaction = self._satisfaction
+        # mu_sum = LinExpr()
+        # n = 0
+
+        metric_names = {
+            'memory': 'memory', 'cpu_ratio': 'cpu', 'cpu_usage': 'cpu'
+        }
+
+        for vm_metric_name, host_metric_name in metric_names.items():
+            for host_id, vm_reqs in host_vm_matches.items():
+                name = f"{vm_metric_name}_satisfaction_for_host_{host_id}"
+                host_cap = all_host_caps[host_id]
+                max_ = getattr(host_cap, host_metric_name).total
+                threshold = getattr(host_cap.contention, vm_metric_name)
+                if _is_nan(threshold) or threshold >= max_:
+                    continue
+                host_metric = sum_(
+                    getattr(vm_req, vm_metric_name)
+                    * x_next[vm_req.id, host_id]
+                    for vm_req in vm_reqs
+                )
+                mu = Var(name=name, lowBound=0, upBound=1)
+                # mu_sum += mu
+                # n += 1
+                model += (
+                    mu <= (max_ - host_metric) / (max_ - threshold),
+                    f"{name}_constraint"
+                )
+                model += (
+                    mu >= satisfaction,
+                    f"overall_{name}_constraint"
+                )
+
+        # obj = 0.5 * (satisfaction + mu_sum / n)
+        obj = satisfaction
+
+        # TODO: Reconsider the implementation of both penalties.
+        n_pend_vms = sum_(self._x_pend.values())
+        pend_penalty = 1.1 * n_pend_vms
+        n_migr_vms = sum_(self._n_migr.values())
+        migr_penalty = n_migr_vms / (self._max_n_migr_vms * 2 + 1)
+        self._model.sense = _MAX
+        self._model += obj - pend_penalty - migr_penalty * 0.01
+
     def _set_objective(self) -> None:
         model = self._model
-        if isinstance(self._criteria, dict):
-            self._add_balance_objectives(self._criteria)
-        elif self._criteria == "migration_count":
+        criteria = self._criteria
+        if isinstance(criteria, dict):
+            self._add_balance_objectives(criteria)
+        elif criteria == "migration_count":
             model.sense = _MIN
             model += sum_(self._n_migr.values())
-        elif self._criteria == "pack":
+        elif criteria == "pack":
             # Minimize the number of used hosts.
             model.sense = _MIN
             n_hosts = sum_(self._y.values())
@@ -991,6 +1179,55 @@ class ILPOptimizer(Mapper):
             n_migr_vms = sum_(self._n_migr.values())
             migr_penalty = n_migr_vms / (self._max_n_migr_vms * 2 + 1)
             model += n_hosts + pend_penalty + migr_penalty
+        elif criteria == "energy":
+            # TODO: Penalize unnecessary migrations.
+            # NOTE: Each migration might require some amount of energy.
+            model.sense = _MIN
+            model += sum_(self._energy.values())
+        elif criteria == "ghg_emission":
+            # TODO: Penalize unnecessary migrations.
+            # NOTE: Each migration might cause some amount of emission.
+            model.sense = _MIN
+            self._add_ghg_emission_objective()
+        elif criteria == "contention":
+            self._add_contention_objective()
+        elif criteria == "contention_with_energy":
+            # # Determine the lower bound on the energy consumption.
+            # self._criteria = "energy"
+            # self._add_energy()
+            # self._set_objective()
+            # self._model.solve(solver=self._solver)
+            # self._set_opt_placement()
+            # energy_lb = sum_(self._energy.values()).value()
+            # # Determine the upper bound on the energy consumption.
+            # self._criteria = "contention"
+            # self._set_objective()
+            # self._model.solve(solver=self._solver)
+            # self._set_opt_placement()
+            # energy_ub = sum_(self._energy.values()).value()
+            # # Add the energy consumption as a part of the overall
+            # # satisfaction objective.
+            # if energy_ub - energy_lb >= 0.0001:
+            #     self._add_energy_satisfaction(energy_lb, energy_ub)
+
+            # Finding the contention satisfaction lower bound and
+            # setting it as a constraint.
+            self._criteria = "contention"
+            self._set_objective()
+            self._model.solve(solver=self._solver)
+            self._set_opt_placement()
+            if self._satisfaction is not None:
+                model += (
+                    self._satisfaction >= self._satisfaction.value(),
+                    "overall_contention_satisfaction_constraint"
+                )
+            # Minimizing the energy consumption given the tightest
+            # feasible contention satisfaction bound.
+            self._criteria = "energy"
+            self._add_energy()
+            self._set_objective()
+            self._model.solve(solver=self._solver)
+            self._set_opt_placement()
         else:
             raise NotImplementedError()
 
@@ -1061,6 +1298,12 @@ class ILPOptimizer(Mapper):
         self._add_variables()
         self._create_expressions()
         self._add_constraints()
+        if (
+            self._energy_constraint is not None
+            or self._criteria == "energy"
+            or self._criteria == "ghg_emission"
+        ):
+            self._add_energy()
         self._set_objective()
         self._model.solve(solver=self._solver)
         self._set_opt_placement()

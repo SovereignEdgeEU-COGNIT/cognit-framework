@@ -769,6 +769,13 @@ class Host:
                     "type": "Element",
                 },
             )
+            carbon_intensity: Optional[Decimal] = field(
+                default=None,
+                metadata={
+                    "name": "CARBON_INTENSITY",
+                    "type": "Element",
+                },
+            )
 
         @dataclass
         class NumaNode:

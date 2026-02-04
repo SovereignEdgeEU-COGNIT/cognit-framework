@@ -25,7 +25,7 @@ import {
 import { InputAdornment } from '@mui/material'
 
 const { MANUAL, PARTIAL, FULL } = DRS_AUTOMATION
-const { BALANCE, PACK } = DRS_POLICY
+const { BALANCE, PACK, ENERGY, CONTENTION } = DRS_POLICY
 
 const AUTOMATION_TEXT_OPTIONS = {
   [MANUAL]: T.AutomationManual,
@@ -36,6 +36,8 @@ const AUTOMATION_TEXT_OPTIONS = {
 const POLICY_TEXT_OPTIONS = {
   [BALANCE]: T.PolicyBalance,
   [PACK]: T.PolicyPack,
+  [ENERGY]: T.PolicyEnergy,
+  [CONTENTION]: T.PolicyContention
 }
 
 const INPUTS = {

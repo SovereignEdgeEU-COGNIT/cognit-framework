@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import enum
 from collections.abc import Collection
+from math import nan as _NAN
 from typing import Optional, Union
 
 
@@ -38,6 +39,15 @@ class PCIDevice:
 
 # @dataclass(frozen=True, slots=True)
 @dataclass(frozen=True)
+class Contention:
+    # The contention thresholds for a host.
+    memory: float = _NAN
+    cpu_ratio: float = _NAN
+    cpu_usage: float = _NAN
+
+
+# @dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class HostCapacity:
     id: int
     memory: Capacity
@@ -48,6 +58,11 @@ class HostCapacity:
     net: Optional[Capacity] = None
     pci_devices: list[PCIDevice] = field(default_factory=list)
     cluster_id: int = 0
+    # Pairs (cpu_usage, energy_consumption) for a host.
+    energy: Optional[list[tuple[float, float]]] = None
+    contention: Contention = field(default_factory=Contention)
+    cpu_usage: float = 0.0
+    carbon_intensity: float = 0.0
 
 
 # @dataclass(frozen=True, slots=True)
@@ -99,7 +114,7 @@ class DStoreRequirement:
     size: int
     # Whether a local disk of the assigned host can be used.
     allow_host_dstores: bool = True
-    # The IDs of the matching host disks.
+    # The IDs of the matching host datastores.
     # Dict {host ID: list of IDs of the matching disks}. If `None`, all
     # host disks are considered matching.
     host_dstore_ids: Optional[dict[int, list[int]]] = None
@@ -113,8 +128,7 @@ class DStoreMatches:
     vm_id: int
     # The ID or index of the datastore requirement.
     requirement: int
-    # The IDs of the hosts (keys), each with the list of IDs of suitable
-    # disks (values).
+    # The IDs of the hosts (keys) with suitable storage (values).
     host_dstores: dict[int, list[int]]
     # The IDs of the shared datastores with suitable storage.
     shared_dstores: list[int]

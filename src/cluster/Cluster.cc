@@ -155,7 +155,7 @@ int Cluster::post_update_template(std::string& error, Template *_old_tmpl)
         return true;
     };
 
-    if (!validate_field("POLICY", std::regex("^(pack|balance)$")))
+    if (!validate_field("POLICY", std::regex("^(pack|balance|energy|contention)$")))
     {
         return -1;
     }

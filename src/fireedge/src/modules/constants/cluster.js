@@ -44,6 +44,8 @@ export const CLUSTER_ACTIONS = {
 export const DRS_POLICY = {
   PACK: 'pack',
   BALANCE: 'balance',
+  ENERGY: 'energy',
+  CONTENTION: 'contention'
 }
 
 /**

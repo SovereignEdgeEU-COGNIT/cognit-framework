@@ -700,6 +700,13 @@ class Vm:
                 "type": "Element",
             },
         )
+        tpm: Optional["Vm.Template.Tpm"] = field(
+            default=None,
+            metadata={
+                "name": "TPM",
+                "type": "Element",
+            },
+        )
         vcpu: Optional[str] = field(
             default=None,
             metadata={
@@ -902,6 +909,17 @@ class Vm:
                 default=None,
                 metadata={
                     "name": "TIME",
+                    "type": "Element",
+                    "required": True,
+                },
+            )
+
+        @dataclass
+        class Tpm:
+            model: Optional[str] = field(
+                default=None,
+                metadata={
+                    "name": "MODEL",
                     "type": "Element",
                     "required": True,
                 },

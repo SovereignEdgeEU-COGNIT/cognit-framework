@@ -19,6 +19,7 @@ from collections import defaultdict
 import io
 import sys
 from dataclasses import replace
+from typing import Optional
 
 import yaml
 from pulp import COIN_CMD, COINMP_DLL, GLPK_CMD
@@ -27,6 +28,7 @@ from xsdata.formats.dataclass.parsers import XmlParser
 from lib.mapper.ilp_optimizer import ILPOptimizer
 from lib.mapper.model import (
     Capacity,
+    Contention,
     DStoreCapacity,
     DStoreRequirement,
     HostCapacity,
@@ -208,6 +210,9 @@ class OptimizerParser:
             used_shared_dstores=self.used_shared_dstores,
             vm_requirements=list(vm_reqs_dict.values()),
             vm_groups=vmg,
+            # TODO: Add support for the groups of VMs that must be
+            # allocated to the same cluster.
+            vm_cluster_groups=[],
             host_capacities=self._parse_host_capacities(),
             dstore_capacities=self._parse_datastore_capacities(),
             vnet_capacities=self._parse_vnet_capacities(),
@@ -450,9 +455,48 @@ class OptimizerParser:
                 net=Capacity(total=self._build_net_capacity(host), usage=0.0),
                 pci_devices=self._build_pci_devices(host.host_share.pci_devices.pci),
                 cluster_id=int(host.cluster_id),
+                energy=self._parse_energy(host),
+                contention=Contention(
+                    cpu_usage=float(
+                        sum(
+                            len(node.core)
+                            for node in host.host_share.numa_nodes.node
+                        )
+                    )
+                ),
+                cpu_usage=self._apply_predictive_adjustment(
+                    float(host.monitoring.capacity.used_cpu or 0),
+                    float(host.monitoring.capacity.used_cpu_forecast or 0),
+                )
+                / 100,
+                carbon_intensity=float(
+                    host.monitoring.system.carbon_intensity or 0
+                )
             )
             for host in self.scheduler_driver_action.host_pool.host
         ]
+
+    def _parse_breakpoints(
+        self, value: Optional[str]
+    ) -> Optional[list[tuple[float, float]]]:
+        if value is None:
+            return None
+        bpts = value.strip().split(';')
+        out: list[tuple[float, float]] = []
+        for bpt in bpts:
+            x, y = bpt.split(',')
+            out.append((float(x), float(y)))
+        return out
+
+    def _parse_energy(self, host) -> Optional[list[tuple[float, float]]]:
+        value: str
+        for child in host.template.children:
+            if child.qname == 'CPU_ENERGY':
+                value = child.text
+                break
+        else:
+            return None
+        return self._parse_breakpoints(value)
 
     def _parse_datastore_capacities(self) -> list[DStoreCapacity]:
         shared_dstore_ids = self.get_ds_map()[0]
