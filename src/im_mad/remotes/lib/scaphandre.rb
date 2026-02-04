@@ -154,13 +154,16 @@ class ScaphandreMonitor
     #
     # Get the total Host power consumption
     #
-    # @return [String] Host Power Consumption in microwatts, empty string on error
+    # @return [Float] Host Power Consumption in microwatts, nil on error
     #
     def host_power
-        client.host_power
+        result = client.host_power
+        return nil if result.nil? || result.to_s.strip.empty?
+
+        result.to_f
     rescue StandardError => e
         STDERR.puts "Error getting host power: #{e.message}" if ENV['ONE_DEBUG']
-        ''
+        nil
     end
 
     #
