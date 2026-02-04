@@ -20,6 +20,8 @@ require 'English'
 require 'sqlite3'
 require 'fileutils'
 
+require_relative 'scaphandre'
+
 # Gathers compute and network resource information about the host
 class LinuxHost
 
@@ -35,7 +37,8 @@ class LinuxHost
       'usedmemory' => ->(m) { m.memory[:used] },
       'freememory' => ->(m) { m.memory[:free] },
       'netrx'      => ->(m) { m.net[:rx] },
-      'nettx'      => ->(m) { m.net[:tx] }
+      'nettx'      => ->(m) { m.net[:tx] },
+      'power'      => ->(m) { m.power }
     }
 
     DB_PATH = '/var/tmp/one_db'
@@ -46,7 +49,7 @@ class LinuxHost
     #  TODO : use virsh freecell when available
     ######
 
-    attr_accessor :cpu, :memory, :net, :cgversion
+    attr_accessor :cpu, :memory, :net, :cgversion, :power
 
     def initialize
         begin
@@ -151,6 +154,13 @@ class LinuxHost
             @net[:rx] += arr[0].to_i
             @net[:tx] += arr[8].to_i
         end
+
+        #########
+        # POWER #
+        #########
+
+        power_monitor = ScaphandreMonitor.new
+        @power = power_monitor.host_power if power_monitor.monitoring_enabled?('host')
     end
 
     def self.print_info(name, value)
@@ -171,6 +181,8 @@ class LinuxHost
 
         print_info('NETRX', linux.net[:rx])
         print_info('NETTX', linux.net[:tx])
+
+        print_info('POWER', linux.power)
 
         linux
     end
