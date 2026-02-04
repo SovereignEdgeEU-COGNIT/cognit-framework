@@ -26,6 +26,7 @@ require 'csv'
 
 require_relative 'process_list'
 require_relative 'domain'
+require_relative 'scaphandre'
 
 ENV['LANG'] = 'C'
 ENV['LC_ALL'] = 'C'
@@ -89,6 +90,11 @@ module KVM
 
         QEMU_GA[:commands].each_key do |ga_info|
             Domain::MONITOR_KEYS << ga_info
+        end
+
+        if ScaphandreMonitor.new.monitoring_enabled?('vm')
+            Domain::MONITOR_KEYS << 'power'
+            Domain::DB_MONITOR_KEYS << 'power'
         end
     rescue StandardError
     end
@@ -668,6 +674,26 @@ module DomainList
 
         include KVM
         include ProcessList
+
+        # Extend the info list with vm power metrics
+        def info_each(do_process)
+            super(do_process)
+            vms_power
+        end
+
+        # The power metrics are read for all vms at once
+        def vms_power
+            # Only populate @vms if the configuration is enabled
+
+            power_monitor = ScaphandreMonitor.new
+            return unless power_monitor.monitoring_enabled?('vm')
+
+            power_metrics = power_monitor.vms_power
+
+            @vms.each do |_uuid, vm|
+                vm[:power] = power_metrics[vm[:id]]
+            end
+        end
 
         # Get the list of wild VMs (not known to OpenNebula) and their monitor
         # information including process usage
