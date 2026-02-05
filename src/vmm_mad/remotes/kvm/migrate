@@ -133,13 +133,25 @@ def local_migration(kvm_vm)
                 devs << dev
                 post_sync << path if format == 'qcow2' && snaps
 
-                cmds =<<~EOS
-                    mkdir -p #{File.dirname(path)}
-                    qemu-img create -f #{format} #{path} #{size}
-                EOS
+                # Check if disk already exists (pre-created by premigrate for cache optimization)
+                # If it exists, skip creation to preserve backing chain
+                check_disk = "test -f #{path}"
+                rc_check, _, _ = Command.ssh(:host => @dst_host, :cmds => check_disk, :emsg => '')
 
-                Command.ssh(:host => @dst_host, :cmds => cmds,
-                            :emsg => 'Cannot create disk')
+                if rc_check != 0
+                    # Disk doesn't exist, create it
+                    cmds =<<~EOS
+                        mkdir -p #{File.dirname(path)}
+                        qemu-img create -f #{format} #{path} #{size}
+                    EOS
+
+                    Command.ssh(:host => @dst_host, :cmds => cmds,
+                                :emsg => 'Cannot create disk')
+                    STDERR.puts "Created empty disk #{path}"
+                else
+                    STDERR.puts "Disk #{path} already exists (backing chain pre-created), using incremental copy"
+                    ENV['COPY_STORAGE_INC'] = 'yes'
+                end
             end
         elsif path.match(%r{disk.[0-9]*.snap/}) # qcow2-symlink, replica
             devs << dev

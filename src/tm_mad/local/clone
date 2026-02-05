@@ -79,6 +79,8 @@ ds = TransferManager::Datastore.from_image_ds(:image  => image,
 # Cache management
 # --------------------------------------------------------------------------
 
+cache_hit = false
+
 if ds['/DATASTORE/TEMPLATE/CACHE_ENABLE'].to_s.upcase == 'YES' && image['/IMAGE/PERSISTENT'] == '0'
     cache_util = '/var/tmp/one/tm/lib/tm_cache.rb'
 
@@ -116,6 +118,7 @@ if ds['/DATASTORE/TEMPLATE/CACHE_ENABLE'].to_s.upcase == 'YES' && image['/IMAGE/
 
     if (data = rc_cache.stdout.empty? ? nil : JSON.parse(rc_cache.stdout))
         src.path, src.host = data.values_at('src', 'host')
+        cache_hit = true
         OpenNebula::DriverLogger.log_debug("Using cached image found on #{src.host} at #{src.path}")
     end
 
@@ -175,35 +178,57 @@ script, host =
         #  - If exists, rebuild the symlink to point <hash>.snap/<snapid>,
         #    instead of disk.<disk_id>.snap/<snapid>
         #  - If it does not exist, create it.
-        [<<~SCRIPT, dst.host]
-            set -e -o pipefail
+        if cache_hit
+            # Use backing image when cache is available
+            [<<~SCRIPT, dst.host]
+                set -e -o pipefail
 
-            pushd #{dst.dir} > /dev/null
-            rm -rf #{dst.path} #{dst.path}.snap
+                pushd #{dst.dir} > /dev/null
+                rm -rf #{dst.path} #{dst.path}.snap
 
-            ssh -n #{src.host} "
-                if [ -d '#{src.path}.snap' ]; then
-                    SRC_SNAP='#{src.base}.snap'
+                mkdir -p #{dst.path}.snap
+                qemu-img create -f qcow2 \
+                    -b #{src.path} \
+                    -F qcow2 \
+                    #{dst.path}.snap/0
+
+                # Create symlink to backing image delta
+                ln -s #{dst.base}.snap/0 #{dst.path}
+
+                popd
+            SCRIPT
+        else
+            # Fallback to TAR copy when no cache (original behavior)
+            [<<~SCRIPT, dst.host]
+                set -e -o pipefail
+
+                pushd #{dst.dir} > /dev/null
+                rm -rf #{dst.path} #{dst.path}.snap
+
+                ssh -n #{src.host} "
+                    if [ -d '#{src.path}.snap' ]; then
+                        SRC_SNAP='#{src.base}.snap'
+                    fi
+
+                    tar -C #{src.dir} --transform='flags=r;s|#{src.base}|#{dst.base}|' \
+                        -c#{tar_opt} - #{src.base} \\\$SRC_SNAP" \
+                | tar -x#{tar_opt} - -C #{dst.dir}
+
+                if [ -L '#{dst.path}' ] && [ -d '#{dst.path}.snap' ]; then
+                    PREVIOUS_SNAP="$(readlink "#{dst.path}" | xargs basename)"
+                    ln -sf disk.#{disk_id}.snap/\$PREVIOUS_SNAP disk.#{disk_id}
+                elif [ -f '#{dst.path}' ] && [ ! -e '#{dst.path}.snap' ]; then
+                    mkdir '#{dst.path}.snap'
+                    mv '#{dst.path}' '#{dst.path}.snap/0'
+                    ln -s '#{dst.base}.snap/0' '#{dst.path}'
+                else
+                    echo 'Invalid qcow2 directory structure' >&2
+                    exit 1
                 fi
 
-                tar -C #{src.dir} --transform='flags=r;s|#{src.base}|#{dst.base}|' \
-                    -c#{tar_opt} - #{src.base} \\\$SRC_SNAP" \
-            | tar -x#{tar_opt} - -C #{dst.dir}
-
-            if [ -L '#{dst.path}' ] && [ -d '#{dst.path}.snap' ]; then
-                PREVIOUS_SNAP="$(readlink "#{dst.path}" | xargs basename)"
-                ln -sf disk.#{disk_id}.snap/\$PREVIOUS_SNAP disk.#{disk_id}
-            elif [ -f '#{dst.path}' ] && [ ! -e '#{dst.path}.snap' ]; then
-                mkdir '#{dst.path}.snap'
-                mv '#{dst.path}' '#{dst.path}.snap/0'
-                ln -s '#{dst.base}.snap/0' '#{dst.path}'
-            else
-                echo 'Invalid qcow2 directory structure' >&2
-                exit 1
-            fi
-
-            popd
-        SCRIPT
+                popd
+            SCRIPT
+        end
     end
 
 rc = clone.ssh(:cmds => script,
