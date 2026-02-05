@@ -305,7 +305,10 @@ module VirtualMachineManagerKVM
             cmd << " #{@domain} #{virsh_uri(host)}"
 
             if !devs.empty?
-                cmd << " --copy-storage-all --migrate-disks #{devs.join(',')}"
+                # Check if COPY_STORAGE_INC env var is set (by TM premigrate)
+                # to use incremental copy when backing chain is pre-created
+                copy_mode = ENV['COPY_STORAGE_INC'] == 'yes' ? '--copy-storage-inc' : '--copy-storage-all'
+                cmd << " #{copy_mode} --migrate-disks #{devs.join(',')}"
             end
 
             virsh_retry(cmd, 'active block job', virsh_tries)

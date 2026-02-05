@@ -32,6 +32,7 @@
 
 require_relative '../lib/tm_action'
 require_relative '../lib/datastore'
+require 'json'
 
 arg_src  = ARGV[0]
 arg_dst  = ARGV[1]
@@ -91,25 +92,210 @@ if src.dir == dst.dir
     end
 end
 
+# --------------------------------------------------------------------------
+# Handle backing images (QCOW2 with cache as backing)
+# For non-live migration, the backing file cache might be missing and needs
+# to be restored before RESTORE
+# --------------------------------------------------------------------------
+
+# Get image datastore info for cache configuration
+cached_disks = []
+
+begin
+    disks = mv.vm.to_hash['VM']['TEMPLATE']['DISK']
+
+    # Handle single disk (hash) vs multiple disks (array)
+    disks = [disks] if disks.is_a?(Hash)
+
+    # Process each disk that has an image
+    disks&.each do |disk|
+        next if disk['TYPE'] == 'CDROM'
+        next unless disk['IMAGE_ID']
+
+        img_id = disk['IMAGE_ID'].to_i
+        disk_id = disk['DISK_ID']
+
+        image = OpenNebula::Image.new_with_id(img_id, mv.one)
+        rc = image.info
+
+        if OpenNebula.is_error?(rc)
+            OpenNebula::DriverLogger.log_warning("Failed to get image #{img_id} info: #{rc.message}")
+            next
+        end
+
+        ds = TransferManager::Datastore.from_image_ds(:image  => image,
+                                                      :client => mv.one)
+
+        # Only qcow2, non-persistent images can leverage cache deltas
+        disk_format = (image['/IMAGE/FORMAT'] || '').downcase
+        next unless disk_format == 'qcow2'
+        next unless image['/IMAGE/PERSISTENT'] == '0'
+
+        # Check if cache is enabled - if so, ensure image is cached on destination
+        if ds['/DATASTORE/TEMPLATE/CACHE_ENABLE'].to_s.upcase == 'YES'
+            OpenNebula::DriverLogger.log_info("Cache enabled for disk.#{disk_id} (image #{img_id}), ensuring cache on #{dst.host}")
+
+            # Use cache manager to ensure image is available on destination
+            cache_util = '/var/tmp/one/tm/lib/tm_cache.rb'
+
+            config = {
+                :ds_xml    => ds.xml_to_hash,
+                :hostname  => dst.host,
+                :one_fe    => src.host,
+                :upstreams => (ds['/DATASTORE/TEMPLATE/CACHE_UPSTREAMS'] || '').split(',').reject(&:empty?)
+            }
+
+            # Use the image hash as cache filename (same as clone script)
+            image_hash = image['/IMAGE/SOURCE'].split('/').last
+            modtime = image['/IMAGE/MODTIME']
+            size = image['/IMAGE/SIZE']
+            fe_default = image['/IMAGE/SOURCE']
+
+            cache_script = "ruby #{cache_util} 'get' " \
+                           "'#{JSON.dump(config)}' " \
+                           "'#{image_hash}' " \
+                           "'#{modtime}' " \
+                           "'#{size}' " \
+                           "'#{fe_default}'"
+
+            OpenNebula::DriverLogger.log_info("Populating cache on #{dst.host} for image #{image_hash}")
+
+            rc = mv.ssh(:host => dst.host,
+                        :cmds => cache_script,
+                        :forward => true,
+                        :nostdout => false,
+                        :nostderr => false,
+                        :err_msg => 'Failed to populate cache on destination')
+
+            if rc.code == 0
+                # Parse cache path from output
+                cache_data = JSON.parse(rc.stdout) rescue nil
+                if cache_data && cache_data['src']
+                    cache_path = cache_data['src']
+                    OpenNebula::DriverLogger.log_info("Cache populated successfully on #{dst.host}: #{cache_path}")
+
+                    # Store disk information for post-migration cache linking
+                    cached_disks << {
+                        disk_id: disk_id,
+                        cache_path: cache_path
+                    }
+                else
+                    OpenNebula::DriverLogger.log_warning("Cache populated but no path returned for disk.#{disk_id}")
+                end
+            else
+                OpenNebula::DriverLogger.log_warning("Failed to populate cache on #{dst.host} for disk.#{disk_id}: #{rc.stderr}")
+                # Continue with migration anyway - cache population is best-effort
+            end
+        end
+    end
+rescue StandardError => e
+    OpenNebula::DriverLogger.log_warning("Error handling backing images: #{e.message}")
+    OpenNebula::DriverLogger.log_warning(e.backtrace.join("\n"))
+end
+
 # move folder from src.host to dst.host
 OpenNebula::DriverLogger.log_info "Moving #{src} to #{dst}"
 
-tar_ssh = <<~EOF
-    set -e -o pipefail
+cached_disk_ids = cached_disks.map {|disk_info| disk_info[:disk_id] }
 
-    tar -C '#{src.dir}' --sparse -cf - '#{src.base}' |
-        ssh '#{dst.host}' '
-          rm -rf '#{dst.path}';
-          tar -C #{dst.dir} --sparse -xf -;
-        '
-    rm -rf '#{src.path}'
-EOF
+if !cached_disks.empty?
+    OpenNebula::DriverLogger.log_info "Using cache-optimized migration for #{cached_disks.size} disk(s)"
 
-rc = mv.ssh(:host => src.host,
-            :cmds => tar_ssh,
-            :forward => true,
-            :err_msg => 'Error copying disk directory to target host',
-            :nostdout => false,
-            :nostderr => false)
+    # First, create destination directory structure
+    mkdir_cmd = "mkdir -p #{dst.path}"
+    rc = mv.ssh(:host => dst.host,
+                :cmds => mkdir_cmd,
+                :err_msg => 'Error creating destination directory')
+    exit(rc.code) if rc.code != 0
 
-exit(rc.code)
+    # Copy metadata files (vm.xml, ds.xml, deployment.*, .monitor, context disks)
+    # Exclude disk.*.snap directories which contain the large image data
+    exclude_args = cached_disk_ids.map {|disk_id| "--exclude='#{src.base}/disk.#{disk_id}.snap'" }.join(' ')
+
+    tar_metadata = <<~EOF
+        set -e -o pipefail
+
+        # Copy metadata files, excluding disk snapshot directories
+        tar -C '#{src.dir}' --sparse \
+            #{exclude_args} \
+            -cf - '#{src.base}' | \
+            ssh '#{dst.host}' 'tar -C #{dst.dir} --sparse -xf -'
+    EOF
+
+    rc = mv.ssh(:host => src.host,
+                :cmds => tar_metadata,
+                :forward => true,
+                :err_msg => 'Error copying metadata files',
+                :nostdout => false,
+                :nostderr => false)
+    exit(rc.code) if rc.code != 0
+
+    # Recreate qcow2 delta files for each cached disk
+    cached_disks.each do |disk_info|
+        disk_id = disk_info[:disk_id]
+        cache_path = disk_info[:cache_path]
+
+        OpenNebula::DriverLogger.log_info "Recreating disk.#{disk_id} from cache: #{cache_path}"
+
+        recreate_cmd = <<~EOF
+            set -e -o pipefail
+
+            cd #{dst.path}
+            rm -rf disk.#{disk_id}.snap
+            mkdir -p disk.#{disk_id}.snap
+
+            # Create qcow2 delta with cached backing image
+            qemu-img create -f qcow2 \
+                -b #{cache_path} \
+                -F qcow2 \
+                disk.#{disk_id}.snap/0
+
+            # Create or update symlink
+            ln -sf disk.#{disk_id}.snap/0 disk.#{disk_id}
+        EOF
+
+        rc = mv.ssh(:host => dst.host,
+                    :cmds => recreate_cmd,
+                    :err_msg => "Error recreating disk.#{disk_id} from cache")
+
+        next if rc.code == 0
+
+        OpenNebula::DriverLogger.log_warning("Failed to recreate disk.#{disk_id} from cache, falling back to full copy")
+        # Fall back to full tar copy for this disk
+        tar_disk = <<~EOF
+            set -e -o pipefail
+
+            tar -C '#{src.dir}/#{src.base}' --sparse -cf - disk.#{disk_id}.snap | \
+                ssh '#{dst.host}' 'tar -C #{dst.path} --sparse -xf -'
+        EOF
+        mv.ssh(:host => src.host,
+               :cmds => tar_disk,
+               :forward => true,
+               :err_msg => "Error copying disk.#{disk_id} snapshot directory")
+    end
+
+    # Clean up source after successful migration
+    cleanup_cmd = "rm -rf '#{src.path}'"
+    mv.ssh(:host => src.host, :cmds => cleanup_cmd)
+
+else
+    tar_ssh = <<~EOF
+        set -e -o pipefail
+
+        tar -C '#{src.dir}' --sparse -cf - '#{src.base}' |
+            ssh '#{dst.host}' '
+              rm -rf '#{dst.path}';
+              tar -C #{dst.dir} --sparse -xf -;
+            '
+        rm -rf '#{src.path}'
+    EOF
+
+    rc = mv.ssh(:host => src.host,
+                :cmds => tar_ssh,
+                :forward => true,
+                :err_msg => 'Error copying disk directory to target host',
+                :nostdout => false,
+                :nostderr => false)
+
+    exit(rc.code)
+end

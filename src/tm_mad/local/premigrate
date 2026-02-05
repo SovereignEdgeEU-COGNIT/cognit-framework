@@ -30,6 +30,8 @@
 #   - vmid is the id of the VM
 #   - dsid is the target datastore
 require_relative '../lib/tm_action'
+require_relative '../lib/datastore'
+require 'json'
 
 arg_srchost = ARGV[0]
 arg_dsthost = ARGV[1]
@@ -41,6 +43,7 @@ template64  = STDIN.read
 premg = TransferManager::Action.new(:vm_id => arg_vmid,
                                     :action_name => 'premigrate')
 dst   = TransferManager::Action::Location.new([arg_dsthost, arg_dstpath])
+src   = TransferManager::Action::Location.new([arg_srchost, arg_dstpath])
 
 #--------------------------------------------------------------------------------
 
@@ -57,5 +60,161 @@ rc = premg.ssh(:host => dst.host,
                :nostdout => false,
                :nostderr => false)
 exit(rc.code) if rc.code != 0
+
+# --------------------------------------------------------------------------
+# Pre-create backing chain on destination for live migration optimization
+# When cache is available, this allows libvirt to use --copy-storage-inc
+# to copy only the top delta layer instead of the full disk
+# --------------------------------------------------------------------------
+backing_chain_created = false
+
+begin
+    disks = premg.vm.to_hash['VM']['TEMPLATE']['DISK']
+    disks = [disks] if disks.is_a?(Hash)
+
+    disks&.each do |disk|
+        next if disk['TYPE'] == 'CDROM'
+        next unless disk['IMAGE_ID']
+
+        img_id = disk['IMAGE_ID'].to_i
+        disk_id = disk['DISK_ID']
+
+        image = OpenNebula::Image.new_with_id(img_id, premg.one)
+        rc_img = image.info
+
+        if OpenNebula.is_error?(rc_img)
+            OpenNebula::DriverLogger.log_warning("Failed to get image #{img_id} info: #{rc_img.message}")
+            next
+        end
+
+        ds = TransferManager::Datastore.from_image_ds(:image => image, :client => premg.one)
+
+        # Only process if cache is enabled, disk is qcow2 and non-persistent
+        next unless ds['/DATASTORE/TEMPLATE/CACHE_ENABLE'].to_s.upcase == 'YES'
+        next unless image['/IMAGE/FORMAT']&.downcase == 'qcow2'
+        next unless image['/IMAGE/PERSISTENT'] == '0'
+
+        # Ensure current VM layout already uses cached backing (symlink -> .snap/0)
+        disk_path = "#{src.path}/disk.#{disk_id}"
+        link_check = <<~EOF
+            if [ ! -L '#{disk_path}' ]; then
+                exit 1
+            fi
+
+            target=$(readlink '#{disk_path}')
+
+            case "$target" in
+                disk.#{disk_id}.snap/*)
+                    if [ -d '#{disk_path}.snap' ]; then
+                        exit 0
+                    else
+                        exit 1
+                    fi
+                    ;;
+                *)
+                    exit 1
+                    ;;
+            esac
+        EOF
+
+        rc_link = premg.ssh(:host    => src.host,
+                            :cmds    => link_check,
+                            :silent  => true,
+                            :err_msg => '')
+
+        unless rc_link.code == 0
+            OpenNebula::DriverLogger.log_info("Disk.#{disk_id} on #{src.host} does not use cached layout, skipping incremental preparation")
+            next
+        end
+
+        OpenNebula::DriverLogger.log_info("Pre-creating backing chain for disk.#{disk_id} (image #{img_id}) on #{dst.host}")
+
+        cache_util = '/var/tmp/one/tm/lib/tm_cache.rb'
+
+        config = {
+            :ds_xml => ds.xml_to_hash,
+            :hostname => dst.host,
+            :one_fe => arg_srchost,
+            :upstreams => (ds['/DATASTORE/TEMPLATE/CACHE_UPSTREAMS'] || '').split(',').reject(&:empty?)
+        }
+
+        image_hash = image['/IMAGE/SOURCE'].split('/').last
+        modtime = image['/IMAGE/MODTIME']
+        size = image['/IMAGE/SIZE']
+        fe_default = image['/IMAGE/SOURCE']
+
+        cache_script = "ruby #{cache_util} 'get' " \
+                       "'#{JSON.dump(config)}' " \
+                       "'#{image_hash}' " \
+                       "'#{modtime}' " \
+                       "'#{size}' " \
+                       "'#{fe_default}'"
+
+        rc_cache = premg.ssh(:host => dst.host,
+                             :cmds => cache_script,
+                             :forward => true,
+                             :nostdout => false,
+                             :nostderr => false,
+                             :err_msg => "Failed to populate cache for disk.#{disk_id}")
+
+        if rc_cache.code != 0
+            OpenNebula::DriverLogger.log_warning("Failed to populate cache for disk.#{disk_id}: #{rc_cache.stderr}")
+            next
+        end
+
+        # Parse cache path from output
+        cache_data = rc_cache.stdout.empty? ? nil : (JSON.parse(rc_cache.stdout) rescue nil)
+        unless cache_data && cache_data['src']
+            OpenNebula::DriverLogger.log_warning("Cache populated but no path returned for disk.#{disk_id}")
+            next
+        end
+
+        cache_path = cache_data['src']
+        OpenNebula::DriverLogger.log_info("Cache available at: #{cache_path}")
+
+        # Pre-create the backing chain on destination
+        # This mimics what happens during clone with cache
+        setup_cmd = <<~EOF
+            set -e -o pipefail
+
+            mkdir -p #{dst.path}
+            cd #{dst.path}
+
+            # Create disk snapshot directory
+            rm -rf disk.#{disk_id}.snap
+            mkdir -p disk.#{disk_id}.snap
+
+            # Create qcow2 delta with cached backing image
+            qemu-img create -f qcow2 \
+                -b #{cache_path} \
+                -F qcow2 \
+                disk.#{disk_id}.snap/0
+
+            # Create symlink
+            ln -sf disk.#{disk_id}.snap/0 disk.#{disk_id}
+        EOF
+
+        rc_setup = premg.ssh(:host => dst.host,
+                             :cmds => setup_cmd,
+                             :err_msg => "Failed to pre-create backing chain for disk.#{disk_id}")
+
+        if rc_setup.code == 0
+            OpenNebula::DriverLogger.log_info("Backing chain pre-created successfully for disk.#{disk_id}")
+            backing_chain_created = true
+        else
+            OpenNebula::DriverLogger.log_warning("Failed to pre-create backing chain for disk.#{disk_id}")
+        end
+    end
+rescue StandardError => e
+    OpenNebula::DriverLogger.log_warning("Error setting up backing chain: #{e.message}")
+    OpenNebula::DriverLogger.log_warning(e.backtrace.join("\n"))
+    # Continue anyway - if backing chain setup fails, libvirt will create its own disks
+end
+
+# Signal to VMM to use --copy-storage-inc if backing chain was created
+if backing_chain_created
+    ENV['COPY_STORAGE_INC'] = 'yes'
+    OpenNebula::DriverLogger.log_info("Using incremental storage copy for live migration")
+end
 
 premg.migrate_other(template64)

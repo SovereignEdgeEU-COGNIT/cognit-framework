@@ -21,6 +21,7 @@
 require 'fileutils'
 require 'json'
 require 'open3'
+require 'set'
 require 'time'
 require 'yaml'
 
@@ -67,6 +68,11 @@ module TransferManager
 
             raise ArgumentError, 'hostname must be a string' if
               @config[:hostname].empty? || @config[:one_fe].empty?
+
+            # Cache for backing file index (backing_file_path -> Set of files using it)
+            @backing_file_index = {}
+            @backing_file_index_time = nil
+            @backing_file_index_ttl = 60 # Refresh index every 60 seconds
         end
 
         # Retrieve an image from the local or upstream caches.
@@ -250,6 +256,12 @@ module TransferManager
 
                 next if id == image_id
 
+                # Check if image is used as backing file - protect it from eviction
+                if is_backing_file_in_use?(imagef)
+                    STDERR.puts "Skipping eviction of #{id}: image is used as backing file"
+                    next
+                end
+
                 selected << id
                 free_size += File.size(imagef)
 
@@ -327,6 +339,202 @@ module TransferManager
             return if out.nil? || out.empty?
 
             JSON.parse(out)
+        end
+
+        # ----------------------------------------------------------------------
+        # Backing file protection methods
+        # ----------------------------------------------------------------------
+
+        # Check if a cached image is used as backing file by any VM on this host
+        # Uses a reverse index for efficient lookup (O(1) instead of scanning all VMs)
+        # @param [String] image_path Full path to the cached image file
+        # @return [Boolean] true if image is used as backing file, false otherwise
+        def is_backing_file_in_use?(image_path)
+            return false unless File.exist?(image_path)
+
+            # Refresh index if needed
+            refresh_backing_file_index if backing_file_index_expired?
+
+            begin
+                # Normalize path for comparison (resolve symlinks, etc.)
+                normalized_path = File.realpath(image_path)
+            rescue StandardError
+                # If we can't resolve the path, use it as-is
+                normalized_path = File.expand_path(image_path)
+            end
+
+            # Fast lookup in the index
+            @backing_file_index.key?(normalized_path) && !@backing_file_index[normalized_path].empty?
+        rescue StandardError => e
+            # Log error but don't block eviction if check fails
+            STDERR.puts "Error checking if image is in use: #{e.message}"
+            false
+        end
+
+        # Build a reverse index: backing_file_path -> Set of files using it
+        # This allows O(1) lookup instead of scanning all VMs for each cached image
+        def refresh_backing_file_index
+            @backing_file_index = {}
+            system_ds_paths = find_system_datastore_paths
+
+            system_ds_paths.each do |ds_path|
+                next unless Dir.exist?(ds_path)
+
+                begin
+                    # Scan all VM directories
+                    Dir.glob(File.join(ds_path, '*')).each do |vm_dir|
+                        next unless File.directory?(vm_dir)
+
+                        # Check all disk files in VM directory
+                        Dir.glob(File.join(vm_dir, 'disk.*')).each do |disk_path|
+                            scan_disk_for_backing_files(disk_path)
+                        end
+                    end
+                rescue StandardError => e
+                    # Log error but continue checking other datastores
+                    STDERR.puts "Error scanning datastore #{ds_path}: #{e.message}"
+                end
+            end
+
+            @backing_file_index_time = Time.now
+        end
+
+        # Scan a disk path and add its backing file to the index
+        # @param [String] disk_path Path to disk file (may be symlink)
+        def scan_disk_for_backing_files(disk_path)
+            files_to_check = []
+
+            # Add main disk file
+            if File.symlink?(disk_path)
+                begin
+                    actual = File.readlink(disk_path)
+                    actual = File.join(File.dirname(disk_path), actual) unless File.absolute_path?(actual)
+                    files_to_check << actual if File.exist?(actual)
+                rescue StandardError
+                    # If symlink is broken, skip it
+                end
+            elsif File.file?(disk_path)
+                files_to_check << disk_path
+            end
+
+            # Add all snapshot files
+            snap_dir = "#{disk_path}.snap"
+            if Dir.exist?(snap_dir)
+                begin
+                    files_to_check.concat(Dir.glob(File.join(snap_dir, '*')))
+                rescue StandardError
+                    # If we can't read snap directory, continue
+                end
+            end
+
+            files_to_check.each do |file|
+                next unless File.file?(file)
+
+                backing_file = get_backing_file(file)
+                next unless backing_file
+
+                begin
+                    normalized_backing = File.realpath(backing_file)
+                rescue StandardError
+                    normalized_backing = File.expand_path(backing_file)
+                end
+
+                # Add to index: backing_file -> Set of files using it
+                @backing_file_index[normalized_backing] ||= Set.new
+                @backing_file_index[normalized_backing].add(file)
+            end
+        end
+
+        # Check if the backing file index has expired and needs refresh
+        # @return [Boolean] true if index is expired or doesn't exist
+        def backing_file_index_expired?
+            return true if @backing_file_index_time.nil?
+
+            (Time.now - @backing_file_index_time) > @backing_file_index_ttl
+        end
+
+
+        # Get backing file path from a qcow2 image
+        # @param [String] qcow2_path Path to qcow2 image file
+        # @return [String, nil] Backing file path or nil if no backing file
+        def get_backing_file(qcow2_path)
+            return nil unless File.exist?(qcow2_path)
+
+            begin
+                # Use qemu-img info to get backing file
+                info_cmd = "qemu-img info -U --output json '#{qcow2_path}' 2>/dev/null"
+                info_json = `#{info_cmd}`.strip
+
+                return nil if info_json.empty?
+
+                info = JSON.parse(info_json)
+
+                # Check for full-backing-filename (absolute path) or backing-filename (relative)
+                backing = info['full-backing-filename'] || info['backing-filename']
+
+                return nil unless backing && backing != 'null'
+
+                # If relative path, make it absolute
+                if backing.start_with?('/')
+                    backing
+                else
+                    File.join(File.dirname(qcow2_path), backing)
+                end
+            rescue StandardError
+                nil
+            end
+        end
+
+        # Find system datastore paths on this host
+        # @return [Array<String>] List of system datastore paths
+        def find_system_datastore_paths
+            paths = []
+
+            # Get DATASTORE_LOCATION from environment or use default
+            datastore_base = ENV['DATASTORE_LOCATION'] || '/var/lib/one/datastores'
+
+            # Default system datastore (ID 0) - most common case
+            default_path = File.join(datastore_base, '0')
+            paths << default_path if Dir.exist?(default_path)
+
+            # Check for other system datastores (could be multiple)
+            if Dir.exist?(datastore_base)
+                begin
+                    Dir.glob(File.join(datastore_base, '*')).each do |ds_path|
+                        next unless File.directory?(ds_path)
+                        next if paths.include?(ds_path) # Skip if already added
+
+                        # Check if this looks like a system datastore (has VM directories)
+                        # System datastores typically have numeric subdirectories (VM IDs)
+                        has_vm_dirs = begin
+                            Dir.glob(File.join(ds_path, '*')).any? do |entry|
+                                next unless File.directory?(entry)
+
+                                vm_id = File.basename(entry)
+                                # VM directories are numeric IDs
+                                if vm_id.match?(/^\d+$/)
+                                    # Check if it contains disk files (indicates it's a VM directory)
+                                    Dir.glob(File.join(entry, 'disk.*')).any? ||
+                                        Dir.glob(File.join(entry, '*.snap')).any?
+                                else
+                                    false
+                                end
+                            end
+                        rescue StandardError
+                            false
+                        end
+
+                        paths << ds_path if has_vm_dirs
+                    end
+                rescue StandardError => e
+                    STDERR.puts "Error scanning datastore base #{datastore_base}: #{e.message}"
+                end
+            end
+
+            # Fallback: if no paths found, use default if it exists
+            paths = [default_path] if paths.empty? && Dir.exist?(default_path)
+
+            paths
         end
 
         # ----------------------------------------------------------------------
