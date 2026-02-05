@@ -159,6 +159,7 @@ class Domain < BaseDomain
         super(name)
 
         @predictions = true
+        @prometheus  = true
 
         path = "#{__dir__}/../../etc/im/kvm-probes.d/forecast.conf"
         conf = YAML.load_file(path)
@@ -238,6 +239,7 @@ class Domain < BaseDomain
         ga_stats
         io_stats
         gpu_stats
+        prometheus_stats
     end
 
     # Convert the output of dumpxml for this domain to an OpenNebula template
@@ -630,6 +632,70 @@ class Domain < BaseDomain
         end
     rescue StandardError => e
         STDERR.puts "Warning: Failed to get GPU stats for VM #{@name}: #{e.message}"
+    end
+
+    # Get Prometheus metrics from VM via qemu-guest-agent
+    def prometheus_stats
+        return unless @vm[:state] == 'RUNNING'
+
+        command = "curl -s http://localhost:9100/metrics"
+        output = run_prometheus_command(command)
+
+        return unless output && !output.empty?
+
+        # Parse queue_total from rabbitmq metrics
+        queue_total = 0
+        output.each_line do |line|
+            if line.start_with?('rabbitmq_queue_messages_ready')
+                # Extract the numeric value at the end of the line
+                match = line.match(/rabbitmq_queue_messages_ready.*?\s+(\d+\.?\d*)/)
+                queue_total += match[1].to_f.to_i if match
+            end
+        end
+
+        @vm[:queue_total] = queue_total
+    rescue StandardError => e
+        STDERR.puts "Warning: Failed to get Prometheus metrics for VM #{@name}: #{e.message}"
+    end
+
+    def run_prometheus_command(command, timeout = 2.0, poll_interval = 0.2)
+        exec_ga = {
+            'execute'   => 'guest-exec',
+            'arguments' => {
+                'path' => '/bin/sh',
+                'arg'  => ['-c', command],
+                'capture-output' => true
+            }
+        }.to_json
+
+        text, _e, s = KVM.virsh(:qemuga, "#{@name} '#{exec_ga}'")
+        return unless s.success?
+
+        response = JSON.parse(text) rescue nil
+        return unless response&.dig('return', 'pid')
+
+        pid     = response['return']['pid']
+        elapsed = 0.0
+
+        while elapsed < timeout
+            sleep poll_interval
+            elapsed += poll_interval
+
+            stat_ga = {
+                'execute'   => 'guest-exec-status',
+                'arguments' => { 'pid' => pid }
+            }.to_json
+
+            text, _e, s = KVM.virsh(:qemuga, "#{@name} '#{stat_ga}'")
+            next unless s.success?
+
+            status = JSON.parse(text) rescue nil
+            if status&.dig('return', 'exited')
+                return Base64.decode64(status['return']['out-data']) rescue nil
+            end
+        end
+
+        nil
     end
 
 end

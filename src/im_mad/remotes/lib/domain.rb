@@ -41,7 +41,8 @@ class BaseDomain
         'gpu_memory_utilization',
         'gpu_memory_free',
         'gpu_power_usage',
-        'gpu_count'
+        'gpu_count',
+        'queue_total'
     ]
 
     DB_MONITOR_KEYS = MONITOR_KEYS.clone
@@ -53,6 +54,7 @@ class BaseDomain
         @vm   = {}
 
         @predictions  = false
+        @prometheus   = false
         @db_retention = 4 # num
     end
 
@@ -90,6 +92,7 @@ class BaseDomain
         end
 
         mon_s << predictions if @predictions
+        mon_s << prometheus  if @prometheus
 
         Base64.strict_encode64(mon_s)
     end
@@ -118,6 +121,11 @@ class BaseDomain
 
     # Compute forecast values for the VM metrics
     def predictions
+        ''
+    end
+
+    # Collect Prometheus metrics
+    def prometheus
         ''
     end
 
