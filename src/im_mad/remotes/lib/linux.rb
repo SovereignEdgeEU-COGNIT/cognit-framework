@@ -159,8 +159,12 @@ class LinuxHost
         # POWER #
         #########
 
-        power_monitor = ScaphandreMonitor.new
-        @power = power_monitor.host_power if power_monitor.monitoring_enabled?('host')
+        begin
+            power_monitor = ScaphandreMonitor.new
+            @power = power_monitor.host_power if power_monitor.monitoring_enabled?('host')
+        rescue StandardError
+            @power = nil
+        end
     end
 
     def self.print_info(name, value)
