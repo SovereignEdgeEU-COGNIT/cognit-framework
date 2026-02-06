@@ -1052,6 +1052,7 @@ IM_PROBES_LIB_FILES="\
     src/im_mad/remotes/lib/kvm_qemu_ga.rb \
     src/im_mad/remotes/lib/lxc.rb \
     src/im_mad/remotes/lib/linux.rb \
+    src/im_mad/remotes/lib/scaphandre.rb \
     src/im_mad/remotes/lib/numa_common.rb \
     src/im_mad/remotes/lib/probe_db.rb \
     src/im_mad/remotes/lib/monitord_client.rb \
