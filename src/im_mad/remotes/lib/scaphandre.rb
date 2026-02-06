@@ -47,6 +47,9 @@ class ScaphandreClient
         return '' if @metrics.nil? || @metrics['host'].nil?
 
         @metrics['host']['consumption'].to_s
+    rescue StandardError => _e
+        STDERR.puts "Scaphandre host_power error: #{_e.message}"
+        ''
     end
 
     #
@@ -72,17 +75,20 @@ class ScaphandreClient
         end
 
         vms_power
+    rescue StandardError => _e
+        STDERR.puts "Scaphandre vms_power error: #{_e.message}"
+        {}
     end
 
     #
     # Execute scaphandre binary and parse JSON output from stdout.
     # Uses --max-top-consumers and --process-regex to limit output to OpenNebula VMs.
+    # Never raises; returns nil on any failure so monitoring probes are not affected.
     #
     # @return [Hash] Parsed metrics or nil on failure
     #
     def pull_metrics
         cmd = build_command
-
         stdout, stderr, status = Open3.capture3(cmd)
 
         unless status.success?
@@ -94,16 +100,13 @@ class ScaphandreClient
         #   "Scaphandre json exporter"
         #   "Sending ⚡ metrics"
         # Then the JSON as a single line.
-        begin
-            lines = stdout.strip.split("\n")
-            json_line = lines.drop(2).join("\n")
-            @metrics = JSON.parse(json_line) unless json_line.empty?
-        rescue JSON::ParserError => e
-            STDERR.puts "Failed to parse Scaphandre JSON output: #{e.message}"
-            @metrics = nil
-        end
-
+        lines = stdout.strip.split("\n")
+        json_line = lines.drop(2).join("\n")
+        @metrics = json_line.empty? ? nil : JSON.parse(json_line)
         @metrics
+    rescue StandardError => _e
+        STDERR.puts "Scaphandre pull_metrics error: #{_e.message}"
+        @metrics = nil
     end
 
     private
@@ -149,6 +152,10 @@ class ScaphandreMonitor
     def initialize
         @conf = load_config
         @client = ScaphandreClient.new(@conf[:binary])
+    rescue StandardError => _e
+        STDERR.puts "ScaphandreMonitor init error: #{_e.message}"
+        @conf = DEFAULT_CONF.dup
+        @client = nil
     end
 
     #
@@ -157,12 +164,14 @@ class ScaphandreMonitor
     # @return [Float] Host Power Consumption in microwatts, nil on error
     #
     def host_power
+        return nil if @client.nil?
+
         result = client.host_power
         return nil if result.nil? || result.to_s.strip.empty?
 
         result.to_f
     rescue StandardError => e
-        STDERR.puts "Error getting host power: #{e.message}" if ENV['ONE_DEBUG']
+        STDERR.puts "Error getting host power: #{e.message}"
         nil
     end
 
@@ -172,10 +181,12 @@ class ScaphandreMonitor
     # @return [Hash] A map of VM ID => power consumption (float, microwatts)
     #
     def vms_power
+        return {} if @client.nil?
+
         result = client.vms_power
         result.transform_values(&:to_f)
     rescue StandardError => e
-        STDERR.puts "Error getting VMs power: #{e.message}" if ENV['ONE_DEBUG']
+        STDERR.puts "Error getting VMs power: #{e.message}"
         {}
     end
 
@@ -185,9 +196,11 @@ class ScaphandreMonitor
     # @return [Hash] Parsed metrics or nil on failure
     #
     def pull_metrics
+        return nil if @client.nil?
+
         client.pull_metrics
     rescue StandardError => e
-        STDERR.puts "Error pulling metrics: #{e.message}" if ENV['ONE_DEBUG']
+        STDERR.puts "Error pulling metrics: #{e.message}"
         nil
     end
 
@@ -198,6 +211,8 @@ class ScaphandreMonitor
     # @return [Boolean] true if monitoring is enabled
     #
     def monitoring_enabled?(metric)
+        return false if @conf.nil? || @conf[:metrics].nil?
+
         @conf[:metrics][metric.to_sym]
     end
 

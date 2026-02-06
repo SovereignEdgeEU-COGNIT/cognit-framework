@@ -684,14 +684,17 @@ module DomainList
         # The power metrics are read for all vms at once
         def vms_power
             # Only populate @vms if the configuration is enabled
+            begin
+                power_monitor = ScaphandreMonitor.new
+                return unless power_monitor.monitoring_enabled?('vm')
 
-            power_monitor = ScaphandreMonitor.new
-            return unless power_monitor.monitoring_enabled?('vm')
+                power_metrics = power_monitor.vms_power
 
-            power_metrics = power_monitor.vms_power
-
-            @vms.each do |_uuid, vm|
-                vm[:power] = power_metrics[vm[:id]]
+                @vms.each do |_uuid, vm|
+                    vm[:power] = power_metrics[vm[:id]]
+                end
+            rescue StandardError
+                # Suppress errors so host/VM monitoring is not affected
             end
         end
 
