@@ -1116,6 +1116,7 @@ IM_PROBES_ETC_KVM_PROBES_FILES="\
     src/im_mad/remotes/kvm-probes.d/pci.conf \
     src/im_mad/remotes/kvm-probes.d/guestagent.conf \
     src/im_mad/remotes/kvm-probes.d/forecast.conf \
+    src/im_mad/remotes/kvm-probes.d/power.conf \
     src/im_mad/remotes/lib/probe_db.conf"
 
 IM_PROBES_QEMU_FILES="\
