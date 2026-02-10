@@ -114,7 +114,7 @@ class ScaphandreClient
         #   "Scaphandre json exporter"
         #   "Sending ⚡ metrics"
         # Then the JSON as a single line.
-        lines = stdout.strip.split("\n")
+        lines = stdout.force_encoding("UTF-8").strip.split("\n")
         json_line = lines.drop(2).join("\n")
         @metrics = json_line.empty? ? nil : JSON.parse(json_line)
         @metrics
