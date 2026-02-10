@@ -2815,6 +2815,18 @@ if [ "$UNINSTALL" = "no" ] ; then
         chown -R $ONEADMIN_USER:$ONEADMIN_GROUP $DESTDIR$d
     done
 
+    # Install scaphandre sudoers for power monitoring (system install only, as root)
+    if [ -z "$ROOT" ] && [ "$(id -u)" = "0" ] && [ "$CLIENT" != "yes" ] && [ "$FIREEDGE" != "yes" ] && \
+       [ "$ONEGATE" != "yes" ] && [ "$ONEFLOW" != "yes" ] && [ "$ONEFORM" != "yes" ]; then
+        SUDOERS_SCAPHANDRE="/etc/sudoers.d/opennebula-scaphandre"
+        if [ ! -f "$SUDOERS_SCAPHANDRE" ] && [ -f "$DESTDIR$VAR_LOCATION/remotes/etc/im/kvm-probes.d/power.conf" ]; then
+            if echo "oneadmin ALL=(root) NOPASSWD: /usr/bin/scaphandre *" > "$SUDOERS_SCAPHANDRE" 2>/dev/null; then
+                chmod 440 "$SUDOERS_SCAPHANDRE"
+                echo "Created $SUDOERS_SCAPHANDRE for Scaphandre power monitoring"
+            fi
+        fi
+    fi
+
     if [ $ARCH = 'x86_64' ]; then
         rm -rf $DESTDIR$LIB_LOCATION/python/pulp/solverdir/cbc/linux/arm64/cbc
     else
