@@ -44,9 +44,20 @@ class ScaphandreClient
     #
     def host_power
         pull_metrics if @metrics.nil?
-        return '' if @metrics.nil? || @metrics['host'].nil?
+        return '' if @metrics.nil?
 
-        @metrics['host']['consumption'].to_s
+        sample = @metrics.is_a?(Array) ? @metrics.last : @metrics
+        return '' if sample.nil? || !sample.is_a?(Hash)
+
+        host = sample['host'] || sample[:host]
+        return '' if host.nil?
+        host = host.is_a?(Array) ? host.first : host
+        return '' unless host.is_a?(Hash)
+
+        consumption = host['consumption'] || host[:consumption]
+        return '' if consumption.nil?
+
+        consumption.to_s
     rescue StandardError => _e
         STDERR.puts "Scaphandre host_power error: #{_e.message}"
         ''
@@ -61,10 +72,13 @@ class ScaphandreClient
     #
     def vms_power
         pull_metrics if @metrics.nil?
-        return {} if @metrics.nil? || @metrics['consumers'].nil?
+        return {} if @metrics.nil?
+
+        sample = @metrics.is_a?(Array) ? @metrics.last : @metrics
+        return {} if sample.nil? || !sample.is_a?(Hash) || sample['consumers'].nil?
 
         vms_power = {}
-        @metrics['consumers'].each do |consumer|
+        sample['consumers'].each do |consumer|
             # OpenNebula VMs: cmdline or exe contains one-<vm_id>
             cmdline = consumer['cmdline'] || consumer['exe'] || ''
             match = cmdline.match(VM_ID_PATTERN)
