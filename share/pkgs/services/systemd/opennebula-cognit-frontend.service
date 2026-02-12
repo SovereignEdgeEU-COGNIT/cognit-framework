@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenNebula COGNIT Frontend
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/share/one/cognit-frontend/python-venv/bin/python /usr/lib/one/cognit-frontend/src/main.py
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/usr/lib/one/cognit-frontend
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

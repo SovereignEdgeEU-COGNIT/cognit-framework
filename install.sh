@@ -30,7 +30,7 @@ usage() {
  echo
  echo "Usage: install.sh [-u install_user] [-g install_group] [-k keep conf]"
  echo "                  [-d ONE_LOCATION] [-c] [-a arch] [-r]"
- echo "                  [-F] [-P] [-G] [-f] [-l] [-h]"
+ echo "                  [-F] [-P] [-G] [-f] [-C] [-l] [-h]"
  echo
  echo "-u: user that will run opennebula, defaults to user executing install.sh"
  echo "-g: group of the user that will run opennebula, defaults to user"
@@ -46,6 +46,7 @@ usage() {
  echo "-G: install only OpenNebula Gate"
  echo "-f: install only OpenNebula Flow"
  echo "-p: install only OpenNebula Form"
+ echo "-C: install only OpenNebula Cognit Frontend"
  echo "-r: remove Opennebula, only useful if -d was not specified, otherwise"
  echo "    rm -rf \$ONE_LOCATION would do the job"
  echo "-l: creates symlinks instead of copying files, useful for development"
@@ -54,7 +55,7 @@ usage() {
 }
 #-------------------------------------------------------------------------------
 
-PARAMETERS=":u:g:d:a:hkcFPrlfG"
+PARAMETERS=":u:g:d:a:hkcFPrlfGC"
 
 INSTALL_ETC="yes"
 UNINSTALL="no"
@@ -65,6 +66,7 @@ FIREEDGE="no"
 FIREEDGE_DEV="no"
 ONEFLOW="no"
 ONEFORM="no"
+COGNITFRONTEND="no"
 ONEADMIN_USER=`id -u`
 ONEADMIN_GROUP=`id -g`
 SRC_DIR=$PWD
@@ -82,6 +84,7 @@ while getopts $PARAMETERS opt; do
         P) FIREEDGE_DEV="no" ;;
         f) ONEFLOW="yes" ;;
         p) ONEFORM="yes" ;;
+        C) COGNITFRONTEND="yes" ;;
         u) ONEADMIN_USER="$OPTARG" ;;
         g) ONEADMIN_GROUP="$OPTARG" ;;
         a) ARCH="$OPTARG" ;;
@@ -114,6 +117,7 @@ if [ -z "$ROOT" ] ; then
     FIREEDGE_LOCATION="$LIB_LOCATION/fireedge"
     ONEFLOW_LOCATION="$LIB_LOCATION/oneflow"
     ONEFORM_LOCATION="$LIB_LOCATION/oneform"
+    COGNITFRONTEND_LOCATION="$LIB_LOCATION/cognit-frontend"
     ONEHEM_LOCATION="$LIB_LOCATION/onehem"
     SYSTEM_DS_LOCATION="$VAR_LOCATION/datastores/0"
     DEFAULT_DS_LOCATION="$VAR_LOCATION/datastores/1"
@@ -173,13 +177,20 @@ if [ -z "$ROOT" ] ; then
         DELETE_DIRS="$MAKE_DIRS"
 
         CHOWN_DIRS=""
+    elif [ "$COGNITFRONTEND" = "yes" ]; then
+        MAKE_DIRS="$BIN_LOCATION $LIB_LOCATION $VAR_LOCATION $COGNITFRONTEND_LOCATION \
+                    $ETC_LOCATION"
+
+        DELETE_DIRS="$MAKE_DIRS"
+
+        CHOWN_DIRS=""
     else
         MAKE_DIRS="$BIN_LOCATION $SBIN_LOCATION $LIB_LOCATION $ETC_LOCATION $VAR_LOCATION \
                    $INCLUDE_LOCATION $SHARE_LOCATION $DOCS_LOCATION \
                    $LOG_LOCATION $RUN_LOCATION $LOCK_LOCATION \
                    $SYSTEM_DS_LOCATION $DEFAULT_DS_LOCATION $MAN_LOCATION \
                    $VM_LOCATION $ONEGATE_LOCATION $ONEFLOW_LOCATION $ONEFORM_LOCATION \
-                   $ONEHEM_LOCATION $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
+                   $COGNITFRONTEND_LOCATION $ONEHEM_LOCATION $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
                    $ONEFORM_PROVIDERS_STATES_LOCATION $ANS_LOCATION"
 
         DELETE_DIRS="$LIB_LOCATION $ETC_LOCATION $LOG_LOCATION $VAR_LOCATION \
@@ -200,6 +211,7 @@ else
     FIREEDGE_LOCATION="$LIB_LOCATION/fireedge"
     ONEFLOW_LOCATION="$LIB_LOCATION/oneflow"
     ONEFORM_LOCATION="$LIB_LOCATION/oneform"
+    COGNITFRONTEND_LOCATION="$LIB_LOCATION/cognit-frontend"
     ONEHEM_LOCATION="$LIB_LOCATION/onehem"
     SYSTEM_DS_LOCATION="$VAR_LOCATION/datastores/0"
     DEFAULT_DS_LOCATION="$VAR_LOCATION/datastores/1"
@@ -249,12 +261,19 @@ else
         DELETE_DIRS="$MAKE_DIRS"
 
         CHOWN_DIRS=""
+    elif [ "$COGNITFRONTEND" = "yes" ]; then
+        MAKE_DIRS="$BIN_LOCATION $LIB_LOCATION $VAR_LOCATION $COGNITFRONTEND_LOCATION \
+                    $ETC_LOCATION"
+
+        DELETE_DIRS="$MAKE_DIRS"
+
+        CHOWN_DIRS=""
     else
         MAKE_DIRS="$BIN_LOCATION $SBIN_LOCATION $LIB_LOCATION $ETC_LOCATION $VAR_LOCATION \
                    $INCLUDE_LOCATION $SHARE_LOCATION $SYSTEM_DS_LOCATION \
                    $DEFAULT_DS_LOCATION $MAN_LOCATION $DOCS_LOCATION \
                    $VM_LOCATION $ONEGATE_LOCATION $ONEFLOW_LOCATION $ONEFORM_LOCATION \
-                   $ONEHEM_LOCATION $LOCK_LOCATION $RUN_LOCATION \
+                   $COGNITFRONTEND_LOCATION $ONEHEM_LOCATION $LOCK_LOCATION $RUN_LOCATION \
                    $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
                    $ONEFORM_PROVIDERS_STATES_LOCATION $ANS_LOCATION"
 
@@ -487,6 +506,9 @@ ONEFORM_DIRS="$ONEFORM_LOCATION/lib \
               $ONEFORM_LOCATION/app/services \
               $ONEFORM_LOCATION/config"
 
+COGNITFRONTEND_DIRS="$COGNITFRONTEND_LOCATION \
+                     $COGNITFRONTEND_LOCATION/src"
+
 ANS_DIRS="$ANS_LOCATION/plugins \
           $ANS_LOCATION/plugins/lib \
           $ANS_LOCATION/plugins/inventory"
@@ -512,9 +534,11 @@ elif [ "$ONEFLOW" = "yes" ]; then
     MAKE_DIRS="$MAKE_DIRS $ONEFLOW_DIRS $LIB_OCA_CLIENT_DIRS"
 elif [ "$ONEFORM" = "yes" ]; then
     MAKE_DIRS="$MAKE_DIRS $ONEFORM_DIRS $ANS_DIRS $LIB_OCA_CLIENT_DIRS"
+elif [ "$COGNITFRONTEND" = "yes" ]; then
+    MAKE_DIRS="$MAKE_DIRS $COGNITFRONTEND_DIRS $LIB_OCA_CLIENT_DIRS"
 else
     MAKE_DIRS="$MAKE_DIRS $SHARE_DIRS $ETC_DIRS $LIB_DIRS $VAR_DIRS \
-                $FIREEDGE_DIRS $ONEFLOW_DIRS $ONEFORM_DIRS $ANS_DIRS"
+                $FIREEDGE_DIRS $ONEFLOW_DIRS $ONEFORM_DIRS $COGNITFRONTEND_DIRS $ANS_DIRS"
 fi
 
 #-------------------------------------------------------------------------------
@@ -809,6 +833,16 @@ INSTALL_ONEFORM_FILES=(
 
 INSTALL_ONEFORM_ETC_FILES=(
     ONEFORM_ETC_FILES:$ETC_LOCATION
+)
+
+INSTALL_COGNITFRONTEND_FILES=(
+    COGNITFRONTEND_FILES:$COGNITFRONTEND_LOCATION
+    COGNITFRONTEND_BIN_FILES:$BIN_LOCATION
+    COGNITFRONTEND_SRC_FILES:$COGNITFRONTEND_LOCATION/src
+)
+
+INSTALL_COGNITFRONTEND_ETC_FILES=(
+    COGNITFRONTEND_ETC_FILES:$ETC_LOCATION
 )
 
 INSTALL_ONEHEM_FILES=(
@@ -2404,6 +2438,23 @@ ONEFORM_ANSIBLE_LIB="share/ansible/plugins/lib/deployment_template.py \
                      share/ansible/plugins/lib/oneform_client.py"
 
 #-----------------------------------------------------------------------------
+# Cognit Frontend files
+#-----------------------------------------------------------------------------
+
+COGNITFRONTEND_FILES="src/cognit-frontend/requirements.txt"
+
+COGNITFRONTEND_BIN_FILES="src/cognit-frontend/bin/cognit-frontend-server"
+
+COGNITFRONTEND_ETC_FILES="src/cognit-frontend/etc/cognit-frontend.conf"
+
+COGNITFRONTEND_SRC_FILES="src/cognit-frontend/src/__init__.py \
+                          src/cognit-frontend/src/main.py \
+                          src/cognit-frontend/src/biscuit_token.py \
+                          src/cognit-frontend/src/cognit_conf.py \
+                          src/cognit-frontend/src/cognit_models.py \
+                          src/cognit-frontend/src/opennebula.py"
+
+#-----------------------------------------------------------------------------
 # Onecfg files
 #-----------------------------------------------------------------------------
 
@@ -2742,12 +2793,15 @@ elif [ "$ONEFLOW" = "yes" ]; then
     INSTALL_SET="${INSTALL_ONEFLOW_FILES[@]}"
 elif [ "$ONEFORM" = "yes" ]; then
     INSTALL_SET="${INSTALL_ONEFORM_FILES[@]}"
+elif [ "$COGNITFRONTEND" = "yes" ]; then
+    INSTALL_SET="${INSTALL_COGNITFRONTEND_FILES[@]}"
 elif [ "$FIREEDGE_DEV" = "no" ]; then
     INSTALL_SET="${INSTALL_FILES[@]} \
                  ${INSTALL_FIREEDGE_FILES[@]} \
                  ${INSTALL_ONEGATE_FILES[@]} \
                  ${INSTALL_ONEFLOW_FILES[@]} \
                  ${INSTALL_ONEFORM_FILES[@]} \
+                 ${INSTALL_COGNITFRONTEND_FILES[@]} \
                  ${INSTALL_ONEHEM_FILES[@]} \
                  ${INSTALL_ONEPROVISION_FILES[@]} \
                  ${INSTALL_ONECFG_FILES[@]}"
@@ -2757,6 +2811,7 @@ else
                  ${INSTALL_ONEGATE_FILES[@]} \
                  ${INSTALL_ONEFLOW_FILES[@]} \
                  ${INSTALL_ONEFORM_FILES[@]} \
+                 ${INSTALL_COGNITFRONTEND_FILES[@]} \
                  ${INSTALL_ONEHEM_FILES[@]} \
                  ${INSTALL_ONEPROVISION_FILES[@]} \
                  ${INSTALL_ONECFG_FILES[@]}"
@@ -2782,13 +2837,16 @@ if [ "$INSTALL_ETC" = "yes" ] ; then
         INSTALL_ETC_SET="${INSTALL_ONEFLOW_ETC_FILES[@]}"
     elif [ "$ONEFORM" = "yes" ]; then
         INSTALL_ETC_SET="${INSTALL_ONEFORM_ETC_FILES[@]}"
+    elif [ "$COGNITFRONTEND" = "yes" ]; then
+        INSTALL_ETC_SET="${INSTALL_COGNITFRONTEND_ETC_FILES[@]}"
     else
         INSTALL_ETC_SET="${INSTALL_ETC_FILES[@]} \
                          ${INSTALL_FIREEDGE_ETC_FILES[@]} \
                          ${INSTALL_ONEGATE_ETC_FILES[@]} \
                          ${INSTALL_ONEHEM_ETC_FILES[@]} \
                          ${INSTALL_ONEFLOW_ETC_FILES[@]} \
-                         ${INSTALL_ONEFORM_ETC_FILES[@]}"
+                         ${INSTALL_ONEFORM_ETC_FILES[@]} \
+                         ${INSTALL_COGNITFRONTEND_ETC_FILES[@]}"
     fi
 
     for i in ${INSTALL_ETC_SET[@]}; do
@@ -2814,6 +2872,22 @@ if [ "$UNINSTALL" = "no" ] ; then
     for d in $CHOWN_DIRS; do
         chown -R $ONEADMIN_USER:$ONEADMIN_GROUP $DESTDIR$d
     done
+
+    # Create Python venv for cognit-frontend and install requirements (path used by systemd service)
+    if [ "$COGNITFRONTEND" = "yes" ] || { [ "$CLIENT" != "yes" ] && [ "$ONEGATE" != "yes" ] && [ "$FIREEDGE" != "yes" ] && [ "$ONEFLOW" != "yes" ] && [ "$ONEFORM" != "yes" ]; }; then
+        COGNITFRONTEND_VENV="$SHARE_LOCATION/cognit-frontend/python-venv"
+        REQUIREMENTS="$DESTDIR$COGNITFRONTEND_LOCATION/requirements.txt"
+        if [ -f "$REQUIREMENTS" ]; then
+            mkdir -p "$DESTDIR$SHARE_LOCATION/cognit-frontend"
+            if python3 -m venv "$DESTDIR$COGNITFRONTEND_VENV" 2>/dev/null; then
+                "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install --upgrade pip -q
+                "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$REQUIREMENTS" -q
+                chown -R $ONEADMIN_USER:$ONEADMIN_GROUP "$DESTDIR$COGNITFRONTEND_VENV"
+            else
+                echo "Warning: could not create Python venv at $COGNITFRONTEND_VENV"
+            fi
+        fi
+    fi
 
     # Install scaphandre sudoers for power monitoring (system install only, as root)
     if [ -z "$ROOT" ] && [ "$(id -u)" = "0" ] && [ "$CLIENT" != "yes" ] && [ "$FIREEDGE" != "yes" ] && \
