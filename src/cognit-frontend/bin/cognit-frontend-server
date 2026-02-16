@@ -23,7 +23,7 @@ if [ -z "$ONE_LOCATION" ]; then
     COGNIT_FRONTEND_LOG=/var/log/one/cognit-frontend.log
     COGNIT_FRONTEND_LOG_ERROR=/var/log/one/cognit-frontend.error
     COGNIT_FRONTEND_CONF=/etc/one/cognit-frontend.conf
-    COGNIT_FRONTEND_VENV=/usr/share/one/cognit-frontend/venv
+    COGNIT_FRONTEND_VENV=/usr/share/one/cognit-frontend/python-venv
 else
     COGNIT_FRONTEND_PID=$ONE_LOCATION/var/cognit-frontend.pid
     COGNIT_FRONTEND_SERVER=$ONE_LOCATION/lib/cognit-frontend/src/main.py
@@ -31,7 +31,7 @@ else
     COGNIT_FRONTEND_LOG=$ONE_LOCATION/var/cognit-frontend.log
     COGNIT_FRONTEND_LOG_ERROR=$ONE_LOCATION/var/cognit-frontend.error
     COGNIT_FRONTEND_CONF=$ONE_LOCATION/etc/cognit-frontend.conf
-    COGNIT_FRONTEND_VENV=$ONE_LOCATION/share/cognit-frontend/venv
+    COGNIT_FRONTEND_VENV=$ONE_LOCATION/share/cognit-frontend/python-venv
 fi
 
 setup()

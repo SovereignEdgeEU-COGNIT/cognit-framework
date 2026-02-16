@@ -2879,7 +2879,7 @@ if [ "$UNINSTALL" = "no" ] ; then
         REQUIREMENTS="$DESTDIR$COGNITFRONTEND_LOCATION/requirements.txt"
         if [ -f "$REQUIREMENTS" ]; then
             mkdir -p "$DESTDIR$SHARE_LOCATION/cognit-frontend"
-            if python3 -m venv "$DESTDIR$COGNITFRONTEND_VENV" 2>/dev/null; then
+            if python3 -m venv "$DESTDIR$COGNITFRONTEND_VENV"; then
                 "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install --upgrade pip -q
                 "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$REQUIREMENTS" -q
                 chown -R $ONEADMIN_USER:$ONEADMIN_GROUP "$DESTDIR$COGNITFRONTEND_VENV"
