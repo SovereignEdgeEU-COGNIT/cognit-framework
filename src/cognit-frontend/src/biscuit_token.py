@@ -34,3 +34,4 @@ def authorize_token(token64: str, public_key=keypair.public_key) -> str:
 
     return token.block_source(0)
 
+

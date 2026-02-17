@@ -4,6 +4,9 @@ from typing import Optional
 
 DESCRIPTIONS = {
     'app_requirement': {
+        'id': "Unique identifier of the scheduling requirements",
+        'is_confidential': "Indicates if the following function offloading requires Confidential Computing",
+        'providers': "Restricts the provider cluster to specific providers",
         'latency': "Maximum latency in milliseconds",
         'exec_time': "Max execution time allowed for the function to execute",
         'energy': "Minimum energy renewable percentage",
@@ -30,9 +33,19 @@ class Location(BaseModel):
     longitude: float
 
 class AppRequirements(BaseModel):
+    # TODO: The ID is set to optional for backward compatibility. Set it as required once the changes in the branch feature/release_prep of the device-runtime-py repo are merged.
+    ID: Optional[str] = Field(
+        default=None,
+        description=DESCRIPTIONS['app_requirement']['id'])
+    IS_CONFIDENTIAL: Optional[bool] = Field(
+        default=False,
+        description=DESCRIPTIONS['app_requirement']['is_confidential'])
+    PROVIDERS: Optional[list[str]] = Field(
+        default=None,
+        description=DESCRIPTIONS['app_requirement']['providers'])
     FLAVOUR: str = Field(
         default="Nature",
-        description=DESCRIPTIONS['app_requirement']['latency'])
+        description=DESCRIPTIONS['app_requirement']['flavour'])
     MAX_LATENCY: Optional[int] = Field(
         default=10,
         description=DESCRIPTIONS['app_requirement']['latency'])

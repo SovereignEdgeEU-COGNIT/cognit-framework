@@ -1,3 +1,5 @@
+import ast
+from typing import Any
 import pyone
 from fastapi import HTTPException, status
 from haversine import haversine, Unit
@@ -73,29 +75,97 @@ def function_get(one: pyone.OneServer, document_id: int) -> dict:
     document = document_get(one, document_id, 'FUNCTION')
     return dict(document.TEMPLATE)
 
-def clusters_ids_get(one: pyone.OneServer, geolocation: str, flavour: str) -> list[int]:
+def clusters_ids_get(
+    one: pyone.OneServer,
+    geolocation: str,
+    flavour: str,
+    is_confidential: str | None = None,
+    providers: str | list[str] | None = None,
+    target_cardinality: str | None = None,
+) -> list[int]:
+    """Return cluster IDs sorted by distance and filtered by optional capabilities.
+
+    Parameters:
+        one: Authenticated OpenNebula client.
+        geolocation: Device coordinates formatted as "lat,lon".
+        flavour: Requested runtime flavour.
+        is_confidential: String "true"/"false" indicating if only confidential clusters should be considered.
+        providers: List of acceptable provider identifiers, or string representation of list.
+        target_cardinality: String representation of target cardinality of the cluster.
+
+    Returns:
+        List of cluster IDs ordered by distance from the device location.
+    """
+
     clusters = one.clusterpool.info()
     device_geolocation = _parse_geolocation(geolocation)
+
+    # Convert string parameters to appropriate types
+    requested_is_confidential = None
+    if is_confidential is not None:
+        requested_is_confidential = is_confidential.lower() == "true"
+
+    requested_providers = set()
+    if providers:
+        # Handle both list objects and string representations
+        if isinstance(providers, list):
+            requested_providers = set(providers)
+        elif isinstance(providers, str):
+            try:
+                # Parse string representation of list like "['provider_1']"
+                parsed_providers = ast.literal_eval(providers)
+                if isinstance(parsed_providers, list):
+                    requested_providers = set(parsed_providers)
+            except (ValueError, SyntaxError):
+                # If parsing fails, treat as comma-separated string
+                requested_providers = set(p.strip() for p in providers.split(",") if p.strip())
+
+    requested_target_cardinality = None
+    if target_cardinality:
+        try:
+            requested_target_cardinality = int(target_cardinality)
+        except ValueError:
+            requested_target_cardinality = None
+
     cluster_distances = []
 
     for cluster in clusters.CLUSTER:
-        # Filter clusters by flavour support
-        flavours_str = cluster.TEMPLATE.get("FLAVOURS")
-        
-        # If FLAVOURS key doesn't exist or is empty, keep the cluster
-        if flavours_str:
-            supported_flavours = flavours_str.split(",")
-            if flavour not in supported_flavours:
+        template = cluster.TEMPLATE
+        supported_flavours = [item.strip() for item in template.get("FLAVOURS", "").split(",") if item.strip()]
+
+        if flavour not in supported_flavours:
+            continue
+
+        if requested_is_confidential is not None:
+            cluster_is_confidential_str = template.get("IS_CONFIDENTIAL", "")
+            if cluster_is_confidential_str:
+                cluster_confidential = cluster_is_confidential_str.lower() == "true"
+                if requested_is_confidential != cluster_confidential:
+                    continue
+
+        if requested_providers:
+            cluster_provider = template.get("PROVIDER", "")
+            if cluster_provider not in requested_providers:
                 continue
-            
-        cluster_geolocation = cluster.TEMPLATE.get("GEOLOCATION")
+
+        if requested_target_cardinality is not None:
+            cluster_max_capacity_str = template.get("MAX_CAPACITY", "")
+            if cluster_max_capacity_str:
+                try:
+                    cluster_max_capacity = int(cluster_max_capacity_str)
+                    if requested_target_cardinality > cluster_max_capacity:
+                        continue
+                except ValueError:
+                    # Skip cluster if MAX_CAPACITY is not a valid integer
+                    continue
+
+        cluster_geolocation = template.get("GEOLOCATION", "")
         if cluster_geolocation:
             try:
                 cluster_coords = _parse_geolocation(cluster_geolocation)
                 distance = haversine(device_geolocation, cluster_coords, unit=Unit.KILOMETERS)
                 cluster_distances.append((cluster.ID, distance))
             except Exception as e:
-                print(f"Skipping cluster {cluster.ID} due to error: {e}")
                 continue
 
     sorted_clusters = sorted(cluster_distances, key=lambda x: x[1])

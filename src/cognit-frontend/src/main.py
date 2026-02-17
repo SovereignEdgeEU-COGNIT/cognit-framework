@@ -3,25 +3,28 @@
 from fastapi.responses import RedirectResponse
 from fastapi import FastAPI, status, HTTPException, Header, Path, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from typing import Annotated, Any, List
+from typing import Annotated, Any, List, Optional
 import uvicorn
 import re
-import requests
-import json
-import logging
 
 import cognit_conf as conf
 import biscuit_token as auth
 import opennebula as one
+import db_manager
 from cognit_models import AppRequirements, EdgeClusterFrontend, ExecSyncParams
+from cognit_logger import setup_logging, get_logger
 
 one.ONE_XMLRPC = conf.ONE_XMLRPC
 
-logger = logging.getLogger("uvicorn")
-if conf.LOG_LEVEL == 'debug':  # uvicorn run log parameter is ignored
-    logger.setLevel(logging.DEBUG)
+# Setup centralized logging
+setup_logging(conf.LOG_LEVEL)
+logger = get_logger(__name__)
 
 # TODO: Update design doc
+
+# Initialize database
+db = db_manager.DBManager(conf.DB_PATH, conf.DB_CLEANUP_DAYS)
+
 
 app = FastAPI(title='Cognit Frontend', version='0.1.0')
 
@@ -98,19 +101,78 @@ async def get_edge_cluster_frontends(
 
     client = authorize(token)
     app_reqs = one.app_requirement_get(client, id)
+    device_id: Optional[str] = app_reqs.get("ID")
 
-    # Flavour from the device runtime
+    # Backward compatibility with the older device-runtime: fallback to cluster selection if ID is not in the app requirements
+    if not device_id or device_id == 'None':
+        logger.info("No device ID found in the app requirements")
+        flavour = app_reqs['FLAVOUR']
+        cluster_ids = one.clusters_ids_get(
+            client,
+            app_reqs['GEOLOCATION'],
+            flavour,
+            app_reqs.get('IS_CONFIDENTIAL'),
+            app_reqs.get('PROVIDERS'),
+            app_reqs.get('MAX_CAPACITY'),
+        )
+        clusters = []
+        for cluster_id in cluster_ids:
+            clusters.append(one.cluster_get(client, cluster_id, flavour))
+        return clusters
+
     flavour = app_reqs['FLAVOUR']
+    cached_device_assignment = db.get_device_assignment(device_id, flavour)
+    if cached_device_assignment and cached_device_assignment['app_req_json'] == app_reqs:
+        logger.info("App requirements are the same as the cached ones")
+        db.update_last_seen(device_id, flavour)
+        cluster = one.cluster_get(client, int(cached_device_assignment['cluster_id']), cached_device_assignment['flavour'])
+        return [cluster]
+    elif not cached_device_assignment:
+        logger.info("No cached device assignment found")
+        # Select the best cluster for this device based on requirements
+        cluster_ids = one.clusters_ids_get(
+            client,
+            app_reqs['GEOLOCATION'],
+            flavour,
+            app_reqs.get('IS_CONFIDENTIAL'),
+            app_reqs.get('PROVIDERS')
+        )
 
-    # Get cluster IDs filtered by flavour support and sorted by distance from device
-    cluster_ids = one.clusters_ids_get(client, app_reqs['GEOLOCATION'], flavour)
+        if not cluster_ids:
+            # No clusters match the requirements
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No clusters available matching the requirements"
+            )
 
-    # Get cluster information with flavour-specific endpoint and supported flavours
-    clusters = []
-    for cluster_id in cluster_ids:
-        clusters.append(one.cluster_get(client, cluster_id, flavour))
-    
-    return clusters
+        # Use the best (closest) cluster
+        selected_cluster_id = cluster_ids[0]
+        db.insert_device_assignment(device_id, selected_cluster_id, flavour, id, app_reqs)
+        cluster = one.cluster_get(client, selected_cluster_id, flavour)
+        return [cluster]
+    else:
+        # App requirements changed, need to find a new cluster
+        logger.info("App requirements changed, selecting new cluster")
+        cluster_ids = one.clusters_ids_get(
+            client,
+            app_reqs['GEOLOCATION'],
+            flavour,
+            app_reqs.get('IS_CONFIDENTIAL'),
+            app_reqs.get('PROVIDERS')
+        )
+
+        if not cluster_ids:
+            # No clusters match the new requirements
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No clusters available matching the new requirements"
+            )
+
+        # Use the best (closest) cluster
+        selected_cluster_id = cluster_ids[0]
+        db.update_device_assignment(device_id, selected_cluster_id, flavour, id, app_reqs)
+        cluster = one.cluster_get(client, selected_cluster_id, flavour)
+        return [cluster]
 
 
 @app.post("/v1/daas/upload", status_code=status.HTTP_200_OK)
