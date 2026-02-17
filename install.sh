@@ -47,6 +47,7 @@ usage() {
  echo "-f: install only OpenNebula Flow"
  echo "-p: install only OpenNebula Form"
  echo "-C: install only OpenNebula Cognit Frontend"
+echo "-O: install only OpenNebula Cognit Optimizer"
  echo "-r: remove Opennebula, only useful if -d was not specified, otherwise"
  echo "    rm -rf \$ONE_LOCATION would do the job"
  echo "-l: creates symlinks instead of copying files, useful for development"
@@ -55,7 +56,7 @@ usage() {
 }
 #-------------------------------------------------------------------------------
 
-PARAMETERS=":u:g:d:a:hkcFPrlfGC"
+PARAMETERS=":u:g:d:a:hkcFPrlfGCO"
 
 INSTALL_ETC="yes"
 UNINSTALL="no"
@@ -67,6 +68,7 @@ FIREEDGE_DEV="no"
 ONEFLOW="no"
 ONEFORM="no"
 COGNITFRONTEND="no"
+COGNITOPTIMIZER="no"
 ONEADMIN_USER=`id -u`
 ONEADMIN_GROUP=`id -g`
 SRC_DIR=$PWD
@@ -85,6 +87,7 @@ while getopts $PARAMETERS opt; do
         f) ONEFLOW="yes" ;;
         p) ONEFORM="yes" ;;
         C) COGNITFRONTEND="yes" ;;
+        O) COGNITOPTIMIZER="yes" ;;
         u) ONEADMIN_USER="$OPTARG" ;;
         g) ONEADMIN_GROUP="$OPTARG" ;;
         a) ARCH="$OPTARG" ;;
@@ -118,6 +121,7 @@ if [ -z "$ROOT" ] ; then
     ONEFLOW_LOCATION="$LIB_LOCATION/oneflow"
     ONEFORM_LOCATION="$LIB_LOCATION/oneform"
     COGNITFRONTEND_LOCATION="$LIB_LOCATION/cognit-frontend"
+    COGNITOPTIMIZER_LOCATION="$LIB_LOCATION/cognit-optimizer"
     ONEHEM_LOCATION="$LIB_LOCATION/onehem"
     SYSTEM_DS_LOCATION="$VAR_LOCATION/datastores/0"
     DEFAULT_DS_LOCATION="$VAR_LOCATION/datastores/1"
@@ -184,13 +188,20 @@ if [ -z "$ROOT" ] ; then
         DELETE_DIRS="$MAKE_DIRS"
 
         CHOWN_DIRS=""
+    elif [ "$COGNITOPTIMIZER" = "yes" ]; then
+        MAKE_DIRS="$BIN_LOCATION $LIB_LOCATION $VAR_LOCATION $COGNITOPTIMIZER_LOCATION \
+                    $ETC_LOCATION"
+
+        DELETE_DIRS="$MAKE_DIRS"
+
+        CHOWN_DIRS=""
     else
         MAKE_DIRS="$BIN_LOCATION $SBIN_LOCATION $LIB_LOCATION $ETC_LOCATION $VAR_LOCATION \
                    $INCLUDE_LOCATION $SHARE_LOCATION $DOCS_LOCATION \
                    $LOG_LOCATION $RUN_LOCATION $LOCK_LOCATION \
                    $SYSTEM_DS_LOCATION $DEFAULT_DS_LOCATION $MAN_LOCATION \
                    $VM_LOCATION $ONEGATE_LOCATION $ONEFLOW_LOCATION $ONEFORM_LOCATION \
-                   $COGNITFRONTEND_LOCATION $ONEHEM_LOCATION $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
+                   $COGNITFRONTEND_LOCATION $COGNITOPTIMIZER_LOCATION $ONEHEM_LOCATION $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
                    $ONEFORM_PROVIDERS_STATES_LOCATION $ANS_LOCATION"
 
         DELETE_DIRS="$LIB_LOCATION $ETC_LOCATION $LOG_LOCATION $VAR_LOCATION \
@@ -212,6 +223,7 @@ else
     ONEFLOW_LOCATION="$LIB_LOCATION/oneflow"
     ONEFORM_LOCATION="$LIB_LOCATION/oneform"
     COGNITFRONTEND_LOCATION="$LIB_LOCATION/cognit-frontend"
+    COGNITOPTIMIZER_LOCATION="$LIB_LOCATION/cognit-optimizer"
     ONEHEM_LOCATION="$LIB_LOCATION/onehem"
     SYSTEM_DS_LOCATION="$VAR_LOCATION/datastores/0"
     DEFAULT_DS_LOCATION="$VAR_LOCATION/datastores/1"
@@ -268,12 +280,19 @@ else
         DELETE_DIRS="$MAKE_DIRS"
 
         CHOWN_DIRS=""
+    elif [ "$COGNITOPTIMIZER" = "yes" ]; then
+        MAKE_DIRS="$BIN_LOCATION $LIB_LOCATION $VAR_LOCATION $COGNITOPTIMIZER_LOCATION \
+                    $ETC_LOCATION"
+
+        DELETE_DIRS="$MAKE_DIRS"
+
+        CHOWN_DIRS=""
     else
         MAKE_DIRS="$BIN_LOCATION $SBIN_LOCATION $LIB_LOCATION $ETC_LOCATION $VAR_LOCATION \
                    $INCLUDE_LOCATION $SHARE_LOCATION $SYSTEM_DS_LOCATION \
                    $DEFAULT_DS_LOCATION $MAN_LOCATION $DOCS_LOCATION \
                    $VM_LOCATION $ONEGATE_LOCATION $ONEFLOW_LOCATION $ONEFORM_LOCATION \
-                   $COGNITFRONTEND_LOCATION $ONEHEM_LOCATION $LOCK_LOCATION $RUN_LOCATION \
+                   $COGNITFRONTEND_LOCATION $COGNITOPTIMIZER_LOCATION $ONEHEM_LOCATION $LOCK_LOCATION $RUN_LOCATION \
                    $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
                    $ONEFORM_PROVIDERS_STATES_LOCATION $ANS_LOCATION"
 
@@ -509,6 +528,11 @@ ONEFORM_DIRS="$ONEFORM_LOCATION/lib \
 COGNITFRONTEND_DIRS="$COGNITFRONTEND_LOCATION \
                      $COGNITFRONTEND_LOCATION/src"
 
+COGNITOPTIMIZER_DIRS="$COGNITOPTIMIZER_LOCATION \
+                      $COGNITOPTIMIZER_LOCATION/src \
+                      $COGNITOPTIMIZER_LOCATION/src/modules \
+                      $COGNITOPTIMIZER_LOCATION/src/device_alloc"
+
 ANS_DIRS="$ANS_LOCATION/plugins \
           $ANS_LOCATION/plugins/lib \
           $ANS_LOCATION/plugins/inventory"
@@ -536,9 +560,11 @@ elif [ "$ONEFORM" = "yes" ]; then
     MAKE_DIRS="$MAKE_DIRS $ONEFORM_DIRS $ANS_DIRS $LIB_OCA_CLIENT_DIRS"
 elif [ "$COGNITFRONTEND" = "yes" ]; then
     MAKE_DIRS="$MAKE_DIRS $COGNITFRONTEND_DIRS $LIB_OCA_CLIENT_DIRS"
+elif [ "$COGNITOPTIMIZER" = "yes" ]; then
+    MAKE_DIRS="$MAKE_DIRS $COGNITOPTIMIZER_DIRS $LIB_OCA_CLIENT_DIRS"
 else
     MAKE_DIRS="$MAKE_DIRS $SHARE_DIRS $ETC_DIRS $LIB_DIRS $VAR_DIRS \
-                $FIREEDGE_DIRS $ONEFLOW_DIRS $ONEFORM_DIRS $COGNITFRONTEND_DIRS $ANS_DIRS"
+                $FIREEDGE_DIRS $ONEFLOW_DIRS $ONEFORM_DIRS $COGNITFRONTEND_DIRS $COGNITOPTIMIZER_DIRS $ANS_DIRS"
 fi
 
 #-------------------------------------------------------------------------------
@@ -843,6 +869,18 @@ INSTALL_COGNITFRONTEND_FILES=(
 
 INSTALL_COGNITFRONTEND_ETC_FILES=(
     COGNITFRONTEND_ETC_FILES:$ETC_LOCATION
+)
+
+INSTALL_COGNITOPTIMIZER_FILES=(
+    COGNITOPTIMIZER_FILES:$COGNITOPTIMIZER_LOCATION
+    COGNITOPTIMIZER_BIN_FILES:$BIN_LOCATION
+    COGNITOPTIMIZER_SRC_FILES:$COGNITOPTIMIZER_LOCATION/src
+    COGNITOPTIMIZER_SRC_MODULES_FILES:$COGNITOPTIMIZER_LOCATION/src/modules
+    COGNITOPTIMIZER_SRC_DEVICE_ALLOC_FILES:$COGNITOPTIMIZER_LOCATION/src/device_alloc
+)
+
+INSTALL_COGNITOPTIMIZER_ETC_FILES=(
+    COGNITOPTIMIZER_ETC_FILES:$ETC_LOCATION
 )
 
 INSTALL_ONEHEM_FILES=(
@@ -2457,6 +2495,34 @@ COGNITFRONTEND_SRC_FILES="src/cognit-frontend/src/__init__.py \
                           src/cognit-frontend/src/opennebula.py"
 
 #-----------------------------------------------------------------------------
+# Cognit Optimizer files
+#-----------------------------------------------------------------------------
+
+COGNITOPTIMIZER_FILES="src/cognit-optimizer/requirements.txt"
+
+COGNITOPTIMIZER_BIN_FILES="src/cognit-optimizer/bin/cognit-optimizer-server"
+
+COGNITOPTIMIZER_ETC_FILES="src/cognit-optimizer/etc/cognit-optimizer.conf"
+
+COGNITOPTIMIZER_SRC_FILES="src/cognit-optimizer/src/__init__.py \
+                           src/cognit-optimizer/src/main.py"
+
+COGNITOPTIMIZER_SRC_MODULES_FILES="src/cognit-optimizer/src/modules/__init__.py \
+                                   src/cognit-optimizer/src/modules/config.py \
+                                   src/cognit-optimizer/src/modules/logger.py \
+                                   src/cognit-optimizer/src/modules/db_adapter.py \
+                                   src/cognit-optimizer/src/modules/mock_pyoneai.py \
+                                   src/cognit-optimizer/src/modules/opennebula_adapter.py \
+                                   src/cognit-optimizer/src/modules/optimizer_adapter.py \
+                                   src/cognit-optimizer/src/modules/cluster_scaler.py"
+
+COGNITOPTIMIZER_SRC_DEVICE_ALLOC_FILES="src/cognit-optimizer/src/device_alloc/__init__.py \
+                                        src/cognit-optimizer/src/device_alloc/__main__.py \
+                                        src/cognit-optimizer/src/device_alloc/model.py \
+                                        src/cognit-optimizer/src/device_alloc/optimizer.py \
+                                        src/cognit-optimizer/src/device_alloc/xmlrpc_client.py"
+
+#-----------------------------------------------------------------------------
 # Onecfg files
 #-----------------------------------------------------------------------------
 
@@ -2797,6 +2863,8 @@ elif [ "$ONEFORM" = "yes" ]; then
     INSTALL_SET="${INSTALL_ONEFORM_FILES[@]}"
 elif [ "$COGNITFRONTEND" = "yes" ]; then
     INSTALL_SET="${INSTALL_COGNITFRONTEND_FILES[@]}"
+elif [ "$COGNITOPTIMIZER" = "yes" ]; then
+    INSTALL_SET="${INSTALL_COGNITOPTIMIZER_FILES[@]}"
 elif [ "$FIREEDGE_DEV" = "no" ]; then
     INSTALL_SET="${INSTALL_FILES[@]} \
                  ${INSTALL_FIREEDGE_FILES[@]} \
@@ -2804,6 +2872,7 @@ elif [ "$FIREEDGE_DEV" = "no" ]; then
                  ${INSTALL_ONEFLOW_FILES[@]} \
                  ${INSTALL_ONEFORM_FILES[@]} \
                  ${INSTALL_COGNITFRONTEND_FILES[@]} \
+                 ${INSTALL_COGNITOPTIMIZER_FILES[@]} \
                  ${INSTALL_ONEHEM_FILES[@]} \
                  ${INSTALL_ONEPROVISION_FILES[@]} \
                  ${INSTALL_ONECFG_FILES[@]}"
@@ -2814,6 +2883,7 @@ else
                  ${INSTALL_ONEFLOW_FILES[@]} \
                  ${INSTALL_ONEFORM_FILES[@]} \
                  ${INSTALL_COGNITFRONTEND_FILES[@]} \
+                 ${INSTALL_COGNITOPTIMIZER_FILES[@]} \
                  ${INSTALL_ONEHEM_FILES[@]} \
                  ${INSTALL_ONEPROVISION_FILES[@]} \
                  ${INSTALL_ONECFG_FILES[@]}"
@@ -2841,6 +2911,8 @@ if [ "$INSTALL_ETC" = "yes" ] ; then
         INSTALL_ETC_SET="${INSTALL_ONEFORM_ETC_FILES[@]}"
     elif [ "$COGNITFRONTEND" = "yes" ]; then
         INSTALL_ETC_SET="${INSTALL_COGNITFRONTEND_ETC_FILES[@]}"
+    elif [ "$COGNITOPTIMIZER" = "yes" ]; then
+        INSTALL_ETC_SET="${INSTALL_COGNITOPTIMIZER_ETC_FILES[@]}"
     else
         INSTALL_ETC_SET="${INSTALL_ETC_FILES[@]} \
                          ${INSTALL_FIREEDGE_ETC_FILES[@]} \
@@ -2848,7 +2920,8 @@ if [ "$INSTALL_ETC" = "yes" ] ; then
                          ${INSTALL_ONEHEM_ETC_FILES[@]} \
                          ${INSTALL_ONEFLOW_ETC_FILES[@]} \
                          ${INSTALL_ONEFORM_ETC_FILES[@]} \
-                         ${INSTALL_COGNITFRONTEND_ETC_FILES[@]}"
+                         ${INSTALL_COGNITFRONTEND_ETC_FILES[@]} \
+                         ${INSTALL_COGNITOPTIMIZER_ETC_FILES[@]}"
     fi
 
     for i in ${INSTALL_ETC_SET[@]}; do
@@ -2876,7 +2949,7 @@ if [ "$UNINSTALL" = "no" ] ; then
     done
 
     # Create Python venv for cognit-frontend and install requirements (path used by systemd service)
-    if [ "$COGNITFRONTEND" = "yes" ] || { [ "$CLIENT" != "yes" ] && [ "$ONEGATE" != "yes" ] && [ "$FIREEDGE" != "yes" ] && [ "$ONEFLOW" != "yes" ] && [ "$ONEFORM" != "yes" ]; }; then
+    if [ "$COGNITFRONTEND" = "yes" ] || [ "$COGNITOPTIMIZER" = "yes" ] || { [ "$CLIENT" != "yes" ] && [ "$ONEGATE" != "yes" ] && [ "$FIREEDGE" != "yes" ] && [ "$ONEFLOW" != "yes" ] && [ "$ONEFORM" != "yes" ]; }; then
         COGNITFRONTEND_VENV="$SHARE_LOCATION/cognit-frontend/python-venv"
         REQUIREMENTS="$DESTDIR$COGNITFRONTEND_LOCATION/requirements.txt"
         if [ -f "$REQUIREMENTS" ]; then
@@ -2888,6 +2961,12 @@ if [ "$UNINSTALL" = "no" ] ; then
             else
                 echo "Warning: could not create Python venv at $COGNITFRONTEND_VENV"
             fi
+        fi
+
+        # Install cognit-optimizer requirements into the shared venv
+        OPTIMIZER_REQUIREMENTS="$DESTDIR$COGNITOPTIMIZER_LOCATION/requirements.txt"
+        if [ -f "$OPTIMIZER_REQUIREMENTS" ] && [ -d "$DESTDIR$COGNITFRONTEND_VENV" ]; then
+            "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$OPTIMIZER_REQUIREMENTS" -q
         fi
     fi
 

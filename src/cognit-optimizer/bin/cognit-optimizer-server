@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2002-2025, OpenNebula Project, OpenNebula Systems                #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+if [ -z "$ONE_LOCATION" ]; then
+    COGNIT_OPTIMIZER_PID=/var/run/one/cognit-optimizer.pid
+    COGNIT_OPTIMIZER_SERVER=/usr/lib/one/cognit-optimizer/src/main.py
+    COGNIT_OPTIMIZER_LOCK_FILE=/var/lock/one/.cognit-optimizer.lock
+    COGNIT_OPTIMIZER_LOG=/var/log/one/cognit-optimizer.log
+    COGNIT_OPTIMIZER_LOG_ERROR=/var/log/one/cognit-optimizer.error
+    COGNIT_OPTIMIZER_CONF=/etc/one/cognit-optimizer.conf
+    COGNIT_OPTIMIZER_VENV=/usr/share/one/cognit-frontend/python-venv
+else
+    COGNIT_OPTIMIZER_PID=$ONE_LOCATION/var/cognit-optimizer.pid
+    COGNIT_OPTIMIZER_SERVER=$ONE_LOCATION/lib/cognit-optimizer/src/main.py
+    COGNIT_OPTIMIZER_LOCK_FILE=$ONE_LOCATION/var/.cognit-optimizer.lock
+    COGNIT_OPTIMIZER_LOG=$ONE_LOCATION/var/cognit-optimizer.log
+    COGNIT_OPTIMIZER_LOG_ERROR=$ONE_LOCATION/var/cognit-optimizer.error
+    COGNIT_OPTIMIZER_CONF=$ONE_LOCATION/etc/cognit-optimizer.conf
+    COGNIT_OPTIMIZER_VENV=$ONE_LOCATION/share/cognit-frontend/python-venv
+fi
+
+setup()
+{
+  if [ -f $COGNIT_OPTIMIZER_LOCK_FILE ]; then
+    if [ -f  $COGNIT_OPTIMIZER_PID ]; then
+      COGNITOPTIMIZERPID=`cat $COGNIT_OPTIMIZER_PID`
+      ps $COGNITOPTIMIZERPID &> /dev/null
+      if [ $? -eq 0 ]; then
+        echo -n "Cognit Optimizer is still running (PID:$COGNITOPTIMIZERPID). Please "
+        echo "try 'cognit-optimizer-server stop' first."
+        exit 1
+      fi
+    fi
+    echo "Stale .lock detected. Erasing it."
+    rm $COGNIT_OPTIMIZER_LOCK_FILE
+  fi
+}
+
+
+start()
+{
+  if [ ! -f "$COGNIT_OPTIMIZER_SERVER" ]; then
+    echo "Cannot find $COGNIT_OPTIMIZER_SERVER."
+    exit 1
+  fi
+
+  # Activate virtual environment if it exists (uses cognit-frontend's venv)
+  if [ -d "$COGNIT_OPTIMIZER_VENV" ]; then
+    source $COGNIT_OPTIMIZER_VENV/bin/activate
+  fi
+
+  # Start the cognit-optimizer daemon
+  touch $COGNIT_OPTIMIZER_LOCK_FILE
+  python3 $COGNIT_OPTIMIZER_SERVER --daemon >> $COGNIT_OPTIMIZER_LOG 2>>$COGNIT_OPTIMIZER_LOG_ERROR &
+  LASTPID=$!
+
+  if [ $? -ne 0 ]; then
+    echo "Error executing cognit-optimizer-server."
+    echo "Check $COGNIT_OPTIMIZER_LOG_ERROR and $COGNIT_OPTIMIZER_LOG for more information"
+    exit 1
+  else
+    echo $LASTPID > $COGNIT_OPTIMIZER_PID
+  fi
+
+  sleep 1
+  ps $LASTPID &> /dev/null
+
+  if [ $? -ne 0 ]; then
+    echo "Error executing cognit-optimizer-server."
+    echo "Check $COGNIT_OPTIMIZER_LOG_ERROR and $COGNIT_OPTIMIZER_LOG for more information"
+    exit 1
+  fi
+
+  echo "cognit-optimizer-server started"
+}
+
+#
+# Function that stops the daemon/service
+#
+stop()
+{
+  if [ ! -f $COGNIT_OPTIMIZER_PID ]; then
+    echo "Couldn't find cognit-optimizer-server process pid."
+    exit 1
+  fi
+
+  # Kill the cognit-optimizer daemon
+  kill -INT `cat $COGNIT_OPTIMIZER_PID` &> /dev/null
+
+  # Remove pid files
+  rm -f $COGNIT_OPTIMIZER_LOCK_FILE &> /dev/null
+  rm -f $COGNIT_OPTIMIZER_PID &> /dev/null
+
+  echo "cognit-optimizer-server stopped"
+}
+
+case "$1" in
+  start)
+    setup
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart)
+    stop
+    setup
+    start
+    ;;
+  *)
+    echo "Usage: cognit-optimizer-server {start|stop|restart}" >&2
+    exit 3
+    ;;
+esac
