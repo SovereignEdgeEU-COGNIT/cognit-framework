@@ -2451,7 +2451,9 @@ COGNITFRONTEND_SRC_FILES="src/cognit-frontend/src/__init__.py \
                           src/cognit-frontend/src/main.py \
                           src/cognit-frontend/src/biscuit_token.py \
                           src/cognit-frontend/src/cognit_conf.py \
+                          src/cognit-frontend/src/cognit_logger.py \
                           src/cognit-frontend/src/cognit_models.py \
+                          src/cognit-frontend/src/db_manager.py \
                           src/cognit-frontend/src/opennebula.py"
 
 #-----------------------------------------------------------------------------
