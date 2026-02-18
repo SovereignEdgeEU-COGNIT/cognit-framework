@@ -1,0 +1,2 @@
+# All dependencies (PyYAML, requests, numpy, pyoneai, PyMySQL) are provided
+# by the shared cognit-frontend virtual environment.

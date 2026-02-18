@@ -48,6 +48,7 @@ usage() {
  echo "-p: install only OpenNebula Form"
  echo "-C: install only OpenNebula Cognit Frontend"
 echo "-O: install only OpenNebula Cognit Optimizer"
+echo "-E: install only OpenNebula Cognit Devices Estimated Load"
  echo "-r: remove Opennebula, only useful if -d was not specified, otherwise"
  echo "    rm -rf \$ONE_LOCATION would do the job"
  echo "-l: creates symlinks instead of copying files, useful for development"
@@ -56,7 +57,7 @@ echo "-O: install only OpenNebula Cognit Optimizer"
 }
 #-------------------------------------------------------------------------------
 
-PARAMETERS=":u:g:d:a:hkcFPrlfGCO"
+PARAMETERS=":u:g:d:a:hkcFPrlfGCOE"
 
 INSTALL_ETC="yes"
 UNINSTALL="no"
@@ -69,6 +70,7 @@ ONEFLOW="no"
 ONEFORM="no"
 COGNITFRONTEND="no"
 COGNITOPTIMIZER="no"
+COGNITDEVICESESTIMATEDLOAD="no"
 ONEADMIN_USER=`id -u`
 ONEADMIN_GROUP=`id -g`
 SRC_DIR=$PWD
@@ -88,6 +90,7 @@ while getopts $PARAMETERS opt; do
         p) ONEFORM="yes" ;;
         C) COGNITFRONTEND="yes" ;;
         O) COGNITOPTIMIZER="yes" ;;
+        E) COGNITDEVICESESTIMATEDLOAD="yes" ;;
         u) ONEADMIN_USER="$OPTARG" ;;
         g) ONEADMIN_GROUP="$OPTARG" ;;
         a) ARCH="$OPTARG" ;;
@@ -122,6 +125,7 @@ if [ -z "$ROOT" ] ; then
     ONEFORM_LOCATION="$LIB_LOCATION/oneform"
     COGNITFRONTEND_LOCATION="$LIB_LOCATION/cognit-frontend"
     COGNITOPTIMIZER_LOCATION="$LIB_LOCATION/cognit-optimizer"
+    COGNITDEVICESESTIMATEDLOAD_LOCATION="$LIB_LOCATION/cognit-devices-estimated-load"
     ONEHEM_LOCATION="$LIB_LOCATION/onehem"
     SYSTEM_DS_LOCATION="$VAR_LOCATION/datastores/0"
     DEFAULT_DS_LOCATION="$VAR_LOCATION/datastores/1"
@@ -195,13 +199,20 @@ if [ -z "$ROOT" ] ; then
         DELETE_DIRS="$MAKE_DIRS"
 
         CHOWN_DIRS=""
+    elif [ "$COGNITDEVICESESTIMATEDLOAD" = "yes" ]; then
+        MAKE_DIRS="$BIN_LOCATION $LIB_LOCATION $VAR_LOCATION $COGNITDEVICESESTIMATEDLOAD_LOCATION \
+                    $ETC_LOCATION"
+
+        DELETE_DIRS="$MAKE_DIRS"
+
+        CHOWN_DIRS=""
     else
         MAKE_DIRS="$BIN_LOCATION $SBIN_LOCATION $LIB_LOCATION $ETC_LOCATION $VAR_LOCATION \
                    $INCLUDE_LOCATION $SHARE_LOCATION $DOCS_LOCATION \
                    $LOG_LOCATION $RUN_LOCATION $LOCK_LOCATION \
                    $SYSTEM_DS_LOCATION $DEFAULT_DS_LOCATION $MAN_LOCATION \
                    $VM_LOCATION $ONEGATE_LOCATION $ONEFLOW_LOCATION $ONEFORM_LOCATION \
-                   $COGNITFRONTEND_LOCATION $COGNITOPTIMIZER_LOCATION $ONEHEM_LOCATION $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
+                   $COGNITFRONTEND_LOCATION $COGNITOPTIMIZER_LOCATION $COGNITDEVICESESTIMATEDLOAD_LOCATION $ONEHEM_LOCATION $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
                    $ONEFORM_PROVIDERS_STATES_LOCATION $ANS_LOCATION"
 
         DELETE_DIRS="$LIB_LOCATION $ETC_LOCATION $LOG_LOCATION $VAR_LOCATION \
@@ -224,6 +235,7 @@ else
     ONEFORM_LOCATION="$LIB_LOCATION/oneform"
     COGNITFRONTEND_LOCATION="$LIB_LOCATION/cognit-frontend"
     COGNITOPTIMIZER_LOCATION="$LIB_LOCATION/cognit-optimizer"
+    COGNITDEVICESESTIMATEDLOAD_LOCATION="$LIB_LOCATION/cognit-devices-estimated-load"
     ONEHEM_LOCATION="$LIB_LOCATION/onehem"
     SYSTEM_DS_LOCATION="$VAR_LOCATION/datastores/0"
     DEFAULT_DS_LOCATION="$VAR_LOCATION/datastores/1"
@@ -287,12 +299,19 @@ else
         DELETE_DIRS="$MAKE_DIRS"
 
         CHOWN_DIRS=""
+    elif [ "$COGNITDEVICESESTIMATEDLOAD" = "yes" ]; then
+        MAKE_DIRS="$BIN_LOCATION $LIB_LOCATION $VAR_LOCATION $COGNITDEVICESESTIMATEDLOAD_LOCATION \
+                    $ETC_LOCATION"
+
+        DELETE_DIRS="$MAKE_DIRS"
+
+        CHOWN_DIRS=""
     else
         MAKE_DIRS="$BIN_LOCATION $SBIN_LOCATION $LIB_LOCATION $ETC_LOCATION $VAR_LOCATION \
                    $INCLUDE_LOCATION $SHARE_LOCATION $SYSTEM_DS_LOCATION \
                    $DEFAULT_DS_LOCATION $MAN_LOCATION $DOCS_LOCATION \
                    $VM_LOCATION $ONEGATE_LOCATION $ONEFLOW_LOCATION $ONEFORM_LOCATION \
-                   $COGNITFRONTEND_LOCATION $COGNITOPTIMIZER_LOCATION $ONEHEM_LOCATION $LOCK_LOCATION $RUN_LOCATION \
+                   $COGNITFRONTEND_LOCATION $COGNITOPTIMIZER_LOCATION $COGNITDEVICESESTIMATEDLOAD_LOCATION $ONEHEM_LOCATION $LOCK_LOCATION $RUN_LOCATION \
                    $ONEPROMETHEUS_DIRS $ONEFORM_PROVIDERS_LOCATION $ONEFORM_EXTERNAL_PROVIDERS_LOCATION \
                    $ONEFORM_PROVIDERS_STATES_LOCATION $ANS_LOCATION"
 
@@ -533,6 +552,9 @@ COGNITOPTIMIZER_DIRS="$COGNITOPTIMIZER_LOCATION \
                       $COGNITOPTIMIZER_LOCATION/src/modules \
                       $COGNITOPTIMIZER_LOCATION/src/device_alloc"
 
+COGNITDEVICESESTIMATEDLOAD_DIRS="$COGNITDEVICESESTIMATEDLOAD_LOCATION \
+                                 $COGNITDEVICESESTIMATEDLOAD_LOCATION/src"
+
 ANS_DIRS="$ANS_LOCATION/plugins \
           $ANS_LOCATION/plugins/lib \
           $ANS_LOCATION/plugins/inventory"
@@ -562,9 +584,11 @@ elif [ "$COGNITFRONTEND" = "yes" ]; then
     MAKE_DIRS="$MAKE_DIRS $COGNITFRONTEND_DIRS $LIB_OCA_CLIENT_DIRS"
 elif [ "$COGNITOPTIMIZER" = "yes" ]; then
     MAKE_DIRS="$MAKE_DIRS $COGNITOPTIMIZER_DIRS $LIB_OCA_CLIENT_DIRS"
+elif [ "$COGNITDEVICESESTIMATEDLOAD" = "yes" ]; then
+    MAKE_DIRS="$MAKE_DIRS $COGNITDEVICESESTIMATEDLOAD_DIRS $LIB_OCA_CLIENT_DIRS"
 else
     MAKE_DIRS="$MAKE_DIRS $SHARE_DIRS $ETC_DIRS $LIB_DIRS $VAR_DIRS \
-                $FIREEDGE_DIRS $ONEFLOW_DIRS $ONEFORM_DIRS $COGNITFRONTEND_DIRS $COGNITOPTIMIZER_DIRS $ANS_DIRS"
+                $FIREEDGE_DIRS $ONEFLOW_DIRS $ONEFORM_DIRS $COGNITFRONTEND_DIRS $COGNITOPTIMIZER_DIRS $COGNITDEVICESESTIMATEDLOAD_DIRS $ANS_DIRS"
 fi
 
 #-------------------------------------------------------------------------------
@@ -881,6 +905,16 @@ INSTALL_COGNITOPTIMIZER_FILES=(
 
 INSTALL_COGNITOPTIMIZER_ETC_FILES=(
     COGNITOPTIMIZER_ETC_FILES:$ETC_LOCATION
+)
+
+INSTALL_COGNITDEVICESESTIMATEDLOAD_FILES=(
+    COGNITDEVICESESTIMATEDLOAD_FILES:$COGNITDEVICESESTIMATEDLOAD_LOCATION
+    COGNITDEVICESESTIMATEDLOAD_BIN_FILES:$BIN_LOCATION
+    COGNITDEVICESESTIMATEDLOAD_SRC_FILES:$COGNITDEVICESESTIMATEDLOAD_LOCATION/src
+)
+
+INSTALL_COGNITDEVICESESTIMATEDLOAD_ETC_FILES=(
+    COGNITDEVICESESTIMATEDLOAD_ETC_FILES:$ETC_LOCATION
 )
 
 INSTALL_ONEHEM_FILES=(
@@ -2523,6 +2557,24 @@ COGNITOPTIMIZER_SRC_DEVICE_ALLOC_FILES="src/cognit-optimizer/src/device_alloc/__
                                         src/cognit-optimizer/src/device_alloc/xmlrpc_client.py"
 
 #-----------------------------------------------------------------------------
+# Cognit Devices Estimated Load files
+#-----------------------------------------------------------------------------
+
+COGNITDEVICESESTIMATEDLOAD_FILES="src/cognit-devices-estimated-load/requirements.txt"
+
+COGNITDEVICESESTIMATEDLOAD_BIN_FILES="src/cognit-devices-estimated-load/bin/cognit-devices-estimated-load-server"
+
+COGNITDEVICESESTIMATEDLOAD_ETC_FILES="src/cognit-devices-estimated-load/etc/cognit-devices-estimated-load.conf"
+
+COGNITDEVICESESTIMATEDLOAD_SRC_FILES="src/cognit-devices-estimated-load/src/__init__.py \
+                                      src/cognit-devices-estimated-load/src/main.py \
+                                      src/cognit-devices-estimated-load/src/estimated_load_daemon.py \
+                                      src/cognit-devices-estimated-load/src/system_metrics.py \
+                                      src/cognit-devices-estimated-load/src/cognit_conf.py \
+                                      src/cognit-devices-estimated-load/src/cognit_logger.py \
+                                      src/cognit-devices-estimated-load/src/db_manager.py"
+
+#-----------------------------------------------------------------------------
 # Onecfg files
 #-----------------------------------------------------------------------------
 
@@ -2865,6 +2917,8 @@ elif [ "$COGNITFRONTEND" = "yes" ]; then
     INSTALL_SET="${INSTALL_COGNITFRONTEND_FILES[@]}"
 elif [ "$COGNITOPTIMIZER" = "yes" ]; then
     INSTALL_SET="${INSTALL_COGNITOPTIMIZER_FILES[@]}"
+elif [ "$COGNITDEVICESESTIMATEDLOAD" = "yes" ]; then
+    INSTALL_SET="${INSTALL_COGNITDEVICESESTIMATEDLOAD_FILES[@]}"
 elif [ "$FIREEDGE_DEV" = "no" ]; then
     INSTALL_SET="${INSTALL_FILES[@]} \
                  ${INSTALL_FIREEDGE_FILES[@]} \
@@ -2873,6 +2927,7 @@ elif [ "$FIREEDGE_DEV" = "no" ]; then
                  ${INSTALL_ONEFORM_FILES[@]} \
                  ${INSTALL_COGNITFRONTEND_FILES[@]} \
                  ${INSTALL_COGNITOPTIMIZER_FILES[@]} \
+                 ${INSTALL_COGNITDEVICESESTIMATEDLOAD_FILES[@]} \
                  ${INSTALL_ONEHEM_FILES[@]} \
                  ${INSTALL_ONEPROVISION_FILES[@]} \
                  ${INSTALL_ONECFG_FILES[@]}"
@@ -2884,6 +2939,7 @@ else
                  ${INSTALL_ONEFORM_FILES[@]} \
                  ${INSTALL_COGNITFRONTEND_FILES[@]} \
                  ${INSTALL_COGNITOPTIMIZER_FILES[@]} \
+                 ${INSTALL_COGNITDEVICESESTIMATEDLOAD_FILES[@]} \
                  ${INSTALL_ONEHEM_FILES[@]} \
                  ${INSTALL_ONEPROVISION_FILES[@]} \
                  ${INSTALL_ONECFG_FILES[@]}"
@@ -2913,6 +2969,8 @@ if [ "$INSTALL_ETC" = "yes" ] ; then
         INSTALL_ETC_SET="${INSTALL_COGNITFRONTEND_ETC_FILES[@]}"
     elif [ "$COGNITOPTIMIZER" = "yes" ]; then
         INSTALL_ETC_SET="${INSTALL_COGNITOPTIMIZER_ETC_FILES[@]}"
+    elif [ "$COGNITDEVICESESTIMATEDLOAD" = "yes" ]; then
+        INSTALL_ETC_SET="${INSTALL_COGNITDEVICESESTIMATEDLOAD_ETC_FILES[@]}"
     else
         INSTALL_ETC_SET="${INSTALL_ETC_FILES[@]} \
                          ${INSTALL_FIREEDGE_ETC_FILES[@]} \
@@ -2921,7 +2979,8 @@ if [ "$INSTALL_ETC" = "yes" ] ; then
                          ${INSTALL_ONEFLOW_ETC_FILES[@]} \
                          ${INSTALL_ONEFORM_ETC_FILES[@]} \
                          ${INSTALL_COGNITFRONTEND_ETC_FILES[@]} \
-                         ${INSTALL_COGNITOPTIMIZER_ETC_FILES[@]}"
+                         ${INSTALL_COGNITOPTIMIZER_ETC_FILES[@]} \
+                         ${INSTALL_COGNITDEVICESESTIMATEDLOAD_ETC_FILES[@]}"
     fi
 
     for i in ${INSTALL_ETC_SET[@]}; do
@@ -2949,7 +3008,7 @@ if [ "$UNINSTALL" = "no" ] ; then
     done
 
     # Create Python venv for cognit-frontend and install requirements (path used by systemd service)
-    if [ "$COGNITFRONTEND" = "yes" ] || [ "$COGNITOPTIMIZER" = "yes" ] || { [ "$CLIENT" != "yes" ] && [ "$ONEGATE" != "yes" ] && [ "$FIREEDGE" != "yes" ] && [ "$ONEFLOW" != "yes" ] && [ "$ONEFORM" != "yes" ]; }; then
+    if [ "$COGNITFRONTEND" = "yes" ] || [ "$COGNITOPTIMIZER" = "yes" ] || [ "$COGNITDEVICESESTIMATEDLOAD" = "yes" ] || { [ "$CLIENT" != "yes" ] && [ "$ONEGATE" != "yes" ] && [ "$FIREEDGE" != "yes" ] && [ "$ONEFLOW" != "yes" ] && [ "$ONEFORM" != "yes" ]; }; then
         COGNITFRONTEND_VENV="$SHARE_LOCATION/cognit-frontend/python-venv"
         REQUIREMENTS="$DESTDIR$COGNITFRONTEND_LOCATION/requirements.txt"
         if [ -f "$REQUIREMENTS" ]; then
@@ -2967,6 +3026,12 @@ if [ "$UNINSTALL" = "no" ] ; then
         OPTIMIZER_REQUIREMENTS="$DESTDIR$COGNITOPTIMIZER_LOCATION/requirements.txt"
         if [ -f "$OPTIMIZER_REQUIREMENTS" ] && [ -d "$DESTDIR$COGNITFRONTEND_VENV" ]; then
             "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$OPTIMIZER_REQUIREMENTS" -q
+        fi
+
+        # Install cognit-devices-estimated-load requirements into the shared venv
+        ESTLOAD_REQUIREMENTS="$DESTDIR$COGNITDEVICESESTIMATEDLOAD_LOCATION/requirements.txt"
+        if [ -f "$ESTLOAD_REQUIREMENTS" ] && [ -d "$DESTDIR$COGNITFRONTEND_VENV" ]; then
+            "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$ESTLOAD_REQUIREMENTS" -q
         fi
     fi
 
