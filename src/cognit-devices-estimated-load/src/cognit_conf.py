@@ -10,11 +10,12 @@ PATH = "/etc/one/cognit-devices-estimated-load.conf"
 PATH_FALLBACK = "/etc/cognit-devices-estimated-load.conf"
 DEFAULT = {
     'log_level': 'info',
-    'one_xmlrpc': 'http://localhost:2633/RPC2',
+    'one_xmlrpc': 'https://cognit-lab.sovereignedge.eu/RPC2',
+    'one_flow_endpoint': 'https://cognit-lab.sovereignedge.eu/oneflow',
     'db_path': '/root/devices_local_database/device_cluster_assignment.db',
     'db_cleanup_days': 30,
     # OpenNebula MySQL database (for monitoring data)
-    'one_db_host': '127.0.0.1',
+    'one_db_host': 'cognit-lab.sovereignedge.eu',
     'one_db_port': 3306,
     'one_db_database': 'opennebula',
     'one_db_user': 'oneadmin',
@@ -72,6 +73,8 @@ except socket.error as e:
 LOG_LEVEL = config['log_level']
 DB_PATH = config['db_path']
 DB_CLEANUP_DAYS = config['db_cleanup_days']
+
+ONE_FLOW_ENDPOINT = config['one_flow_endpoint'].rstrip('/')
 
 # OpenNebula MySQL database (for monitoring data)
 ONE_DB_HOST = config['one_db_host']

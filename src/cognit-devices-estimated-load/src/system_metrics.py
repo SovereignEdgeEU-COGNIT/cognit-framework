@@ -45,9 +45,8 @@ def get_next_storage_timestamp(service_id: int) -> datetime:
 def get_oneflow_services() -> List[Dict[str, Any]]:
     """Get all OneFlow services via REST API."""
     try:
-        oneflow_url = conf.ONE_XMLRPC.replace(':2633/RPC2', ':2474')
         response = requests.get(
-            f"{oneflow_url}/service",
+            f"{conf.ONE_FLOW_ENDPOINT}/service",
             auth=HTTPBasicAuth(conf.ONE_API_USER, conf.ONE_API_PASSWORD),
             timeout=10
         )
