@@ -759,6 +759,8 @@ INSTALL_FILES=(
     HOOK_FT_FILES:$VAR_LOCATION/remotes/hooks/ft
     HOOK_RAFT_FILES:$VAR_LOCATION/remotes/hooks/raft
 
+    HOOK_GEO_SHARE_FILE:$SHARE_LOCATION
+
     LIBVIRT_RNG_SHARE_MODULE_FILES:$SHARE_LOCATION/schemas/libvirt
     XSD_FILES:$SHARE_LOCATION/schemas/xsd
 
@@ -1999,6 +2001,7 @@ ONEDB_LOCAL_MIGRATOR_FILES="src/onedb/local/4.5.80_to_4.7.80.rb \
 ETC_FILES="share/etc/oned.conf \
            share/etc/defaultrc \
            share/etc/guacd \
+           share/etc/electricity_maps.conf \
            src/tm_mad/tmrc \
            src/monitor/etc/monitord.conf "
 
@@ -2047,6 +2050,13 @@ HOOK_FT_FILES="share/hooks/ft/host_error.rb \
 #-------------------------------------------------------------------------------
 
 HOOK_RAFT_FILES="share/hooks/raft/vip.sh"
+
+#-------------------------------------------------------------------------------
+# GEO hook scripts, to be installed under $SHARE_LOCATION
+#-------------------------------------------------------------------------------
+
+HOOK_GEO_SHARE_FILE="share/hooks/geo/geo.rb \
+                     share/hooks/geo/geo_carbon_hook.tmpl"
 
 #-------------------------------------------------------------------------------
 # Installation scripts, to be installed under $SHARE_LOCATION
