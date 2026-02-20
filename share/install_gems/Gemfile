@@ -84,6 +84,7 @@ gem 'aws-sdk-ec2', '>=1.151'
 gem 'aws-sdk-s3'
 gem 'grpc'
 gem 'ruby-saml'
+gem 'geocoder'
 
 # Since Ruby 3.4 some common libraries were dropped
 if ruby_version >= Gem::Version.new('3.4.0')

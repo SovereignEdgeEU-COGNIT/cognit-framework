@@ -51,6 +51,13 @@
   mode: '0640'
   src: src/vmm_mad/remotes/packet/packet_driver.default
 
+- name: /etc/one/electricity_maps.conf
+  class: Yaml::Strict
+  owner: root
+  group: oneadmin
+  mode: '0640'
+  src: share/etc/electricity_maps.conf
+
 - name: /etc/one/auth/ldap_auth.conf
   class: Yaml::Strict
   owner: root
