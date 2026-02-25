@@ -58,6 +58,7 @@ class MetricAttributes:
     type: Union[MetricType, None] = None
     dtype: DType = field(default_factory=Float)
     operator: Union[str, None] = None
+    aggregation_fn: Union[str, None] = None
 
     def __eq__(self, value):
         if not isinstance(value, MetricAttributes):
@@ -67,6 +68,7 @@ class MetricAttributes:
             and self.type == value.type
             and self.dtype == value.dtype
             and self.operator == value.operator
+            and self.aggregation_fn == value.aggregation_fn
         )
 
     def __str__(self) -> str:
@@ -77,8 +79,10 @@ class MetricAttributes:
             repr += f"type={self.type}, "
         if self.operator:
             repr += f"operator={self.operator}, "
+        if self.aggregation_fn:
+            repr += f"aggregation_fn={self.aggregation_fn}, "
         repr += f"dtype={self.dtype})"
         return repr
 
     def __hash__(self):
-        return hash((self.name, self.type, self.operator, self.dtype))
+        return hash((self.name, self.type, self.operator, self.aggregation_fn, self.dtype))

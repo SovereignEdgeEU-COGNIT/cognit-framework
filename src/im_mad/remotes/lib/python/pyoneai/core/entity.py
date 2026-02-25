@@ -1,4 +1,4 @@
-# Copyright 2002-2025, OpenNebula Project, OpenNebula Systems
+# Copyright 2002-2024, OpenNebula Project, OpenNebula Systems
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ from .entity_uid import EntityUID
 from .metric import Metric
 from .metric_accessor import MetricAccessor
 from .metric_types import MetricAttributes
+from .monitoring_accessor_registry import MonitoringAccessorRegistry
+from .monitoring_config import MonitoringConfig
 from .predictor_accessor import PredictorAccessor
 from .sqlite_accessor import SQLiteAccessor
 
@@ -36,13 +38,12 @@ class Entity:
         Unique identifier for the entity, consisting of type and ID.
     metrics : dict[str, MetricAttributes]
         Dictionary of metric names to their attributes.
-    monitoring : dict[str, Union[str, int]]
-        Dictionary containing the monitoring configuration.
-        - "db_path": Path to the SQLite database.
-        - "timestamp_col": Name of the timestamp column.
-        - "value_col": Name of the metric value column.
-        - "monitor_interval": Interval (seconds) at which the data is stored in the database.
-        - "table_name_template": Template for the table name.
+    monitoring : Union[MonitoringConfig, dict[str, Union[str, int]]]
+        Monitoring configuration. Can be either:
+        - MonitoringConfig instance (new format)
+        - Dictionary (backward compatible):
+            - Legacy format: {"db_path": "...", "monitor_interval": 60, ...}
+            - New format: {"backend": "sqlite|prometheus", "connection": {...}, ...}
     artifact : Union[BasePredictionModel, None], optional
         AI/ML artifact used for metric predictions, by default None.
 
@@ -50,8 +51,8 @@ class Entity:
     ----------
     _uid : EntityUID
         The unique identifier for the entity.
-    _obs : SQLiteAccessor
-        Accessor for retrieving timeseries data from the SQLite database.
+    _obs : BaseMonitoringAccessor
+        Accessor for retrieving timeseries data from the monitoring system.
     _pred : Union[PredictorAccessor, int]
         Accessor for making predictions, initialized with the artifact
         or set to Fourier Model if no artifact is provided.
@@ -68,13 +69,33 @@ class Entity:
         self,
         uid: EntityUID,
         metrics: dict[str, MetricAttributes],
-        monitoring: dict[str, Union[str, int]],
+        monitoring: Union[MonitoringConfig, dict[str, Union[str, int]]],
         artifact: Union[ml.BasePredictionModel, None] = None,
     ) -> None:
 
         self._uid = uid
 
-        self._obs = SQLiteAccessor(monitoring)
+        # Handle monitoring configuration with backward compatibility
+        if isinstance(monitoring, MonitoringConfig):
+            # New format: use MonitoringConfig directly
+            self._obs = MonitoringAccessorRegistry.create(monitoring)
+        elif isinstance(monitoring, dict):
+            if "backend" in monitoring:
+                # New dict format with explicit backend
+                monitoring_config = MonitoringConfig.from_dict(monitoring)
+                self._obs = MonitoringAccessorRegistry.create(monitoring_config)
+            else:
+                # Legacy SQLite format: convert to MonitoringConfig
+                monitoring_config = MonitoringConfig.opennebula_sqlite(
+                    db_path=monitoring["db_path"],
+                    monitor_interval=monitoring.get("monitor_interval", 60),
+                    window_size=monitoring.get("window_size", 5),
+                )
+                self._obs = MonitoringAccessorRegistry.create(monitoring_config)
+        else:
+            raise TypeError(
+                "monitoring must be either MonitoringConfig or dict"
+            )
 
         if artifact:
             self._pred = PredictorAccessor(artifact)

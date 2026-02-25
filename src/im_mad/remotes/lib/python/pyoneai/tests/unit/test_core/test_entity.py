@@ -32,8 +32,11 @@ class TestEntity:
             ),
         }
 
-        self.mock_sqlite_accessor = mocker.patch(
-            "pyoneai.core.entity.SQLiteAccessor"
+        # Mock the registry create method instead of SQLiteAccessor
+        self.mock_monitoring_accessor = mocker.MagicMock()
+        self.mock_registry_create = mocker.patch(
+            "pyoneai.core.entity.MonitoringAccessorRegistry.create",
+            return_value=self.mock_monitoring_accessor
         )
         self.mock_predictor_accessor = mocker.patch(
             "pyoneai.core.entity.PredictorAccessor"
@@ -57,7 +60,11 @@ class TestEntity:
         assert len(self.entity._metrics) == 2
         assert "cpu" in self.entity._metrics
         assert "memory" in self.entity._metrics
-        self.mock_sqlite_accessor.assert_called_once_with(self.monitoring)
+        # Check that MonitoringAccessorRegistry.create was called
+        # (should be called once with a MonitoringConfig)
+        self.mock_registry_create.assert_called_once()
+        # Verify the accessor was assigned
+        assert self.entity._obs == self.mock_monitoring_accessor
         self.mock_metric.call_count == 2
         self.mock_metric_accessor.call_count == 2
         self.mock_fourier_model.assert_called_once()

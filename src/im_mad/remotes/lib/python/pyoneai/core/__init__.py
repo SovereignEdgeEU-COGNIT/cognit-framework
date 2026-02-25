@@ -1,4 +1,4 @@
-# Copyright 2002-2025, OpenNebula Project, OpenNebula Systems
+# Copyright 2002-2024, OpenNebula Project, OpenNebula Systems
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,12 +13,20 @@
 # limitations under the License.
 
 from .base_accessor import AccessorType, BaseAccessor
+from .cluster_aggregating_accessor import ClusterAggregatingAccessor
 from .entity import Entity
 from .entity_uid import EntityType, EntityUID
 from .metric import Metric
 from .metric_accessor import MetricAccessor
 from .metric_types import MetricAttributes, MetricType, Float, UInt
+from .monitoring_accessor import BaseMonitoringAccessor
+from .monitoring_accessor_registry import MonitoringAccessorRegistry
+from .monitoring_config import MonitoringConfig
+from .opennebula_db_monitoring_accessor import OpenNebulaDBMonitoringAccessor
 from .predictor_accessor import PredictorAccessor
+from .prometheus_monitoring_accessor import PrometheusMonitoringAccessor
+from .service_aggregating_accessor import ServiceAggregatingAccessor
 from .sqlite_accessor import SQLiteAccessor
+from .sqlite_monitoring_accessor import SQLiteMonitoringAccessor
 from .time import Instant, Period
 from .tsnumpy import Timeseries

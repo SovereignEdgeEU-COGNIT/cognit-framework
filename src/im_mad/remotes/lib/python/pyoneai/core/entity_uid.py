@@ -1,4 +1,4 @@
-# Copyright 2002-2025, OpenNebula Project, OpenNebula Systems
+# Copyright 2002-2024, OpenNebula Project, OpenNebula Systems
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,10 @@ from typing import Any
 
 class EntityType(Enum):
     HOST = "host"
+    CLUSTER = "cluster"
     VIRTUAL_MACHINE = "virtualmachine"
+    SERVICE = "service"
+    SERVICE_ROLE = "service_role"
 
 
 @dataclass
