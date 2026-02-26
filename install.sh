@@ -1171,7 +1171,9 @@ IM_PROBES_LIB_FILES="\
 IM_PROBES_LIB_PYTHON_FILES="\
     src/im_mad/remotes/lib/python/models/ \
     src/im_mad/remotes/lib/python/prediction.py \
-    src/im_mad/remotes/lib/python/prediction.sh"
+    src/im_mad/remotes/lib/python/prediction.sh \
+    src/im_mad/remotes/lib/python/cpu_energy.py \
+    src/im_mad/remotes/lib/python/create_cpu_energy_db.py"
 
 IM_PROBES_LIB_PYONEAI_FILES="\
     src/im_mad/remotes/lib/python/pyoneai/__init__.py \
@@ -1205,7 +1207,8 @@ IM_PROBES_KVM_HOST_SYSTEM_FILES="\
      src/im_mad/remotes/kvm-probes.d/host/system/wild_vm.rb \
      src/im_mad/remotes/kvm-probes.d/host/system/pci.rb \
      src/im_mad/remotes/kvm-probes.d/host/system/memory_encryption.rb \
-     src/im_mad/remotes/kvm-probes.d/host/system/version.sh"
+     src/im_mad/remotes/kvm-probes.d/host/system/version.sh \
+     src/im_mad/remotes/kvm-probes.d/host/system/cpu_energy.sh"
 
 IM_PROBES_KVM_VM_MONITOR_FILES="\
      src/im_mad/remotes/kvm-probes.d/vm/monitor/poll.rb \
@@ -3007,6 +3010,18 @@ if [ "$INSTALL_ETC" = "yes" ] ; then
 
         LINK=$OLD_LINK
    done
+fi
+
+# Generate cpu_energy hardware specs database in remotes/etc for packaging/sync.
+if [ "$UNINSTALL" = "no" ]; then
+    CPU_ENERGY_DB="$DESTDIR$VAR_LOCATION/remotes/etc/im/kvm-probes.d/cpu_energy.db"
+    CPU_ENERGY_SCRIPT="$DESTDIR$VAR_LOCATION/remotes/im/lib/python/create_cpu_energy_db.py"
+
+    if command -v python3 >/dev/null 2>&1 && [ -f "$CPU_ENERGY_SCRIPT" ]; then
+        if ! python3 "$CPU_ENERGY_SCRIPT" --db-path "$CPU_ENERGY_DB"; then
+            echo "Warning: could not generate cpu_energy.db"
+        fi
+    fi
 fi
 
 # --- Set ownership, remove OpenNebula directories or delete other arch files---
