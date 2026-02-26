@@ -2555,7 +2555,6 @@ COGNITOPTIMIZER_SRC_MODULES_FILES="src/cognit-optimizer/src/modules/__init__.py 
                                    src/cognit-optimizer/src/modules/config.py \
                                    src/cognit-optimizer/src/modules/logger.py \
                                    src/cognit-optimizer/src/modules/db_adapter.py \
-                                   src/cognit-optimizer/src/modules/mock_pyoneai.py \
                                    src/cognit-optimizer/src/modules/opennebula_adapter.py \
                                    src/cognit-optimizer/src/modules/optimizer_adapter.py \
                                    src/cognit-optimizer/src/modules/cluster_scaler.py"
@@ -3017,31 +3016,31 @@ if [ "$UNINSTALL" = "no" ] ; then
         chown -R $ONEADMIN_USER:$ONEADMIN_GROUP $DESTDIR$d
     done
 
-    # Create Python venv for cognit-frontend and install requirements (path used by systemd service)
+    # Create shared Python venv for cognit packages and install requirements (path used by systemd services)
     if [ "$COGNITFRONTEND" = "yes" ] || [ "$COGNITOPTIMIZER" = "yes" ] || [ "$COGNITDEVICESESTIMATEDLOAD" = "yes" ] || { [ "$CLIENT" != "yes" ] && [ "$ONEGATE" != "yes" ] && [ "$FIREEDGE" != "yes" ] && [ "$ONEFLOW" != "yes" ] && [ "$ONEFORM" != "yes" ]; }; then
-        COGNITFRONTEND_VENV="$SHARE_LOCATION/cognit-frontend/python-venv"
+        COGNIT_VENV="$SHARE_LOCATION/cognit-venv"
         REQUIREMENTS="$DESTDIR$COGNITFRONTEND_LOCATION/requirements.txt"
         if [ -f "$REQUIREMENTS" ]; then
-            mkdir -p "$DESTDIR$SHARE_LOCATION/cognit-frontend"
-            if python3 -m venv "$DESTDIR$COGNITFRONTEND_VENV"; then
-                "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install --upgrade pip -q
-                "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$REQUIREMENTS" -q
-                chown -R $ONEADMIN_USER:$ONEADMIN_GROUP "$DESTDIR$COGNITFRONTEND_VENV"
+            mkdir -p "$DESTDIR$SHARE_LOCATION"
+            if python3 -m venv "$DESTDIR$COGNIT_VENV"; then
+                "$DESTDIR$COGNIT_VENV/bin/pip" install --upgrade pip -q
+                "$DESTDIR$COGNIT_VENV/bin/pip" install -r "$REQUIREMENTS" -q
+                chown -R $ONEADMIN_USER:$ONEADMIN_GROUP "$DESTDIR$COGNIT_VENV"
             else
-                echo "Warning: could not create Python venv at $COGNITFRONTEND_VENV"
+                echo "Warning: could not create Python venv at $COGNIT_VENV"
             fi
         fi
 
         # Install cognit-optimizer requirements into the shared venv
         OPTIMIZER_REQUIREMENTS="$DESTDIR$COGNITOPTIMIZER_LOCATION/requirements.txt"
-        if [ -f "$OPTIMIZER_REQUIREMENTS" ] && [ -d "$DESTDIR$COGNITFRONTEND_VENV" ]; then
-            "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$OPTIMIZER_REQUIREMENTS" -q
+        if [ -f "$OPTIMIZER_REQUIREMENTS" ] && [ -d "$DESTDIR$COGNIT_VENV" ]; then
+            "$DESTDIR$COGNIT_VENV/bin/pip" install -r "$OPTIMIZER_REQUIREMENTS" -q
         fi
 
         # Install cognit-devices-estimated-load requirements into the shared venv
         ESTLOAD_REQUIREMENTS="$DESTDIR$COGNITDEVICESESTIMATEDLOAD_LOCATION/requirements.txt"
-        if [ -f "$ESTLOAD_REQUIREMENTS" ] && [ -d "$DESTDIR$COGNITFRONTEND_VENV" ]; then
-            "$DESTDIR$COGNITFRONTEND_VENV/bin/pip" install -r "$ESTLOAD_REQUIREMENTS" -q
+        if [ -f "$ESTLOAD_REQUIREMENTS" ] && [ -d "$DESTDIR$COGNIT_VENV" ]; then
+            "$DESTDIR$COGNIT_VENV/bin/pip" install -r "$ESTLOAD_REQUIREMENTS" -q
         fi
     fi
 

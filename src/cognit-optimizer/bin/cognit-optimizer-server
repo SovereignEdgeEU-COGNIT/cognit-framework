@@ -23,7 +23,7 @@ if [ -z "$ONE_LOCATION" ]; then
     COGNIT_OPTIMIZER_LOG=/var/log/one/cognit-optimizer.log
     COGNIT_OPTIMIZER_LOG_ERROR=/var/log/one/cognit-optimizer.error
     COGNIT_OPTIMIZER_CONF=/etc/one/cognit-optimizer.conf
-    COGNIT_OPTIMIZER_VENV=/usr/share/one/cognit-frontend/python-venv
+    COGNIT_OPTIMIZER_VENV=/usr/share/one/cognit-venv
 else
     COGNIT_OPTIMIZER_PID=$ONE_LOCATION/var/cognit-optimizer.pid
     COGNIT_OPTIMIZER_SERVER=$ONE_LOCATION/lib/cognit-optimizer/src/main.py
@@ -31,7 +31,13 @@ else
     COGNIT_OPTIMIZER_LOG=$ONE_LOCATION/var/cognit-optimizer.log
     COGNIT_OPTIMIZER_LOG_ERROR=$ONE_LOCATION/var/cognit-optimizer.error
     COGNIT_OPTIMIZER_CONF=$ONE_LOCATION/etc/cognit-optimizer.conf
-    COGNIT_OPTIMIZER_VENV=$ONE_LOCATION/share/cognit-frontend/python-venv
+    COGNIT_OPTIMIZER_VENV=$ONE_LOCATION/share/cognit-venv
+fi
+
+if [ -z "$ONE_LOCATION" ]; then
+    export PYTHONPATH="/var/lib/one/remotes/im/lib/python${PYTHONPATH:+:$PYTHONPATH}"
+else
+    export PYTHONPATH="$ONE_LOCATION/var/remotes/im/lib/python${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
 setup()

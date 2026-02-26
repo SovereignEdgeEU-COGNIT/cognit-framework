@@ -31,7 +31,13 @@ else
     COGNIT_ESTLOAD_LOG=$ONE_LOCATION/var/cognit-devices-estimated-load.log
     COGNIT_ESTLOAD_LOG_ERROR=$ONE_LOCATION/var/cognit-devices-estimated-load.error
     COGNIT_ESTLOAD_CONF=$ONE_LOCATION/etc/cognit-devices-estimated-load.conf
-    COGNIT_ESTLOAD_VENV=$ONE_LOCATION/share/cognit-frontend/python-venv
+    COGNIT_ESTLOAD_VENV=$ONE_LOCATION/share/cognit-venv
+fi
+
+if [ -z "$ONE_LOCATION" ]; then
+    export PYTHONPATH="/var/lib/one/remotes/im/lib/python${PYTHONPATH:+:$PYTHONPATH}"
+else
+    export PYTHONPATH="$ONE_LOCATION/var/remotes/im/lib/python${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
 setup()

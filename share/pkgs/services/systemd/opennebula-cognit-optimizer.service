@@ -4,11 +4,11 @@ After=network.target opennebula-cognit-frontend.service
 
 [Service]
 Type=simple
-ExecStart=/usr/share/one/cognit-frontend/python-venv/bin/python /usr/lib/one/cognit-optimizer/src/main.py --daemon
+ExecStart=/usr/share/one/cognit-venv/bin/python /usr/lib/one/cognit-optimizer/src/main.py --daemon
 Restart=on-failure
 RestartSec=5
 WorkingDirectory=/usr/lib/one/cognit-optimizer/src
-Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONUNBUFFERED=1" "PYTHONPATH=/var/lib/one/remotes/im/lib/python"
 
 [Install]
 WantedBy=multi-user.target
