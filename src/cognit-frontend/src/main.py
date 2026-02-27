@@ -6,6 +6,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from typing import Annotated, Any, List, Optional
 import uvicorn
 import re
+import json
 
 import cognit_conf as conf
 import biscuit_token as auth
@@ -55,7 +56,16 @@ async def upload_application_requirements(
 ) -> int:
 
     client = authorize(token)
-
+    device_id = requirements.ID
+    flavour = requirements.FLAVOUR
+    cached_device_assignment = db.get_device_assignment(device_id, flavour)
+    if cached_device_assignment:
+        app_id = cached_device_assignment['app_req_id'] 
+        app_reqs = one.app_requirement_get(client, app_id)
+        reqs = requirements.model_dump()
+        reqs = { k:str(v) for k,v in reqs.items() }
+        if app_reqs == reqs:
+            return app_id 
     return one.app_requirement_create(client, requirements.model_dump())
 
 
@@ -102,7 +112,6 @@ async def get_edge_cluster_frontends(
     client = authorize(token)
     app_reqs = one.app_requirement_get(client, id)
     device_id: Optional[str] = app_reqs.get("ID")
-
     # Backward compatibility with the older device-runtime: fallback to cluster selection if ID is not in the app requirements
     if not device_id or device_id == 'None':
         logger.info("No device ID found in the app requirements")

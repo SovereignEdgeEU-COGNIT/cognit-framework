@@ -96,9 +96,11 @@ def clusters_ids_get(
     Returns:
         List of cluster IDs ordered by distance from the device location.
     """
-
     clusters = one.clusterpool.info()
-    device_geolocation = _parse_geolocation(geolocation)
+    if isinstance(geolocation, str):
+        device_geolocation = _parse_geolocation(geolocation)
+    else:
+        device_geolocation = geolocation
 
     # Convert string parameters to appropriate types
     requested_is_confidential = None
