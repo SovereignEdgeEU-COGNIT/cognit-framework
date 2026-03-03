@@ -71,7 +71,6 @@ def run_optimization_with_db_updates() -> tuple | None:
         cleanup_old_records()
         
         assignments = get_device_assignments()
-        
         logger.info("=== DEVICE REQUIREMENTS ===")
         valid_assignments = []
         for assignment in assignments:
@@ -126,7 +125,7 @@ def run_optimization_with_db_updates() -> tuple | None:
                 flavour = composite_id.split(':::')[1] if ':::' in composite_id else None
                 logger.info(f"Device {device_id} - Flavour {flavour} --> Cluster {cluster_id}")
             
-            scale_clusters_and_update_db(n_vms, allocs)
+            scale_clusters_and_update_db(n_vms, allocs, all_feasible_cluster_ids, cluster_lookup)
 
         return result
     

@@ -36,7 +36,6 @@ def get_flavour_from_template(cluster_template: dict) -> Optional[str]:
     flavours_str = cluster_template.get('FLAVOURS', '')
     if not flavours_str:
         return None
-    # Get first flavour without creating a list
     comma_idx = flavours_str.find(',')
     first_flavour = flavours_str[:comma_idx] if comma_idx != -1 else flavours_str
     return first_flavour.strip() or None
@@ -76,7 +75,7 @@ def scale_cluster(cluster_id: int, target_cardinality: int, flavour: str) -> boo
     Args:
         cluster_id: The cluster ID to scale
         target_cardinality: Target number of VMs for the cluster
-        flavour: Flavour to use for scaling (if None, extracts from template)
+        flavour: Flavour to use for scaling
         
     Returns:
         True if scaling was successful, False otherwise
@@ -95,38 +94,64 @@ def scale_cluster(cluster_id: int, target_cardinality: int, flavour: str) -> boo
     return call_scale_endpoint(endpoint)
 
 
-def scale_clusters_and_update_db(n_vms: dict[int, int], allocs: dict) -> int:
+def scale_clusters_and_update_db(
+    n_vms: dict[int, int],
+    allocs: dict,
+    all_feasible_cluster_ids: set[int],
+    cluster_lookup: dict[int, dict]
+) -> int:
     """
     Scale clusters in parallel and update DB for each successfully scaled cluster.
-    Each flavour within a cluster is scaled separately.
+    Clusters present in the solution are scaled to their optimizer n_vms.
+    Clusters that are feasible but absent from the solution are scaled to 0.
     
     Args:
-        n_vms: Cluster ID to target cardinality mapping
+        n_vms: Cluster ID to target cardinality mapping (from optimizer)
         allocs: Composite ID (device_id:::flavour) to cluster ID mapping
+        all_feasible_cluster_ids: All cluster IDs that were feasible for at least one device
+        cluster_lookup: Cluster ID to OpenNebula template mapping
         
     Returns:
         Total number of devices updated in database
     """
     logger.info("=== CLUSTER SCALING ===")
     
-    if not n_vms:
-        logger.info("No clusters to scale")
+    if not allocs:
+        logger.info("No device allocations, nothing to scale")
         return 0
     
-    # Group devices by (cluster_id, flavour) and use optimizer's n_vms for target cardinality
+    # Build scaling targets: clusters in the solution get their optimizer n_vms,
+    # feasible clusters not in the solution get scaled to 0
     cluster_flavour_targets = {}
+
+    # Clusters present in the optimizer solution
     for composite_id, cluster_id in allocs.items():
         if cluster_id in n_vms and ':::' in composite_id:
             flavour = composite_id.split(':::', 1)[1]
             key = (cluster_id, flavour)
-            # Use optimizer's calculated VM count, ensure minimum of 1
             if key not in cluster_flavour_targets:
-                target_cardinality = max(1, n_vms[cluster_id])
+                target_cardinality = n_vms[cluster_id]
                 cluster_flavour_targets[key] = target_cardinality
                 logger.info(f"Cluster {cluster_id} (flavour {flavour}): optimizer n_vms={n_vms[cluster_id]}, target_cardinality={target_cardinality}")
+
+    # Clusters in the solution (just their IDs)
+    clusters_in_solution = {cid for _, cid in allocs.items()}
+
+    # Feasible clusters NOT in the solution: scale to 0
+    for cluster_id in all_feasible_cluster_ids:
+        if cluster_id not in clusters_in_solution:
+            template = cluster_lookup.get(cluster_id, {})
+            flavour = get_flavour_from_template(template)
+            if flavour:
+                key = (cluster_id, flavour)
+                if key not in cluster_flavour_targets:
+                    cluster_flavour_targets[key] = 0
+                    logger.info(f"Cluster {cluster_id} (flavour {flavour}): not in solution, target_cardinality=0")
+            else:
+                logger.warning(f"Cluster {cluster_id}: not in solution but no FLAVOURS in template, skipping scale-down")
     
     if not cluster_flavour_targets:
-        logger.info("No device assignments found for clusters to scale")
+        logger.info("No cluster-flavour combinations to scale")
         return 0
     
     logger.info(f"Scaling {len(cluster_flavour_targets)} cluster-flavour combinations in parallel")
@@ -143,23 +168,23 @@ def scale_clusters_and_update_db(n_vms: dict[int, int], allocs: dict) -> int:
             executor.submit(scale_with_flavour, cid, flavour, target_cardinality): (cid, flavour)
             for (cid, flavour), target_cardinality in cluster_flavour_targets.items()
         }
-        scaled_cluster_flavours = set()  # (cluster_id, flavour)
+        scaled_cluster_flavours = set()
         for future in as_completed(future_map):
             cid, flavour, ok = future.result()
             if ok:
                 scaled_cluster_flavours.add((cid, flavour))
     
-    # Update DB only for successfully scaled (cluster_id, flavour) pairs
+    # Update DB only for successfully scaled (cluster_id, flavour) pairs that are in the solution
     for cid, flavour in scaled_cluster_flavours:
         cluster_allocs = {
             dev_id: cluster_id for dev_id, cluster_id in allocs.items()
             if cluster_id == cid and dev_id.split(':::', 1)[1] == flavour
         }
-        updated = update_device_cluster_assignments(cluster_allocs)
-        total_updated += updated
-        if updated > 0:
-            logger.info(f"Cluster {cid} ({flavour}) scaled successfully: {updated} devices updated")
+        if cluster_allocs:
+            updated = update_device_cluster_assignments(cluster_allocs)
+            total_updated += updated
+            if updated > 0:
+                logger.info(f"Cluster {cid} ({flavour}) scaled successfully: {updated} devices updated")
     
     logger.info(f"Cluster scaling completed: {total_updated} total devices updated")
     return total_updated
-
