@@ -4,7 +4,7 @@ After=network.target opennebula-cognit-frontend.service
 
 [Service]
 Type=simple
-ExecStart=/usr/share/one/cognit-venv/bin/python /usr/lib/one/cognit-devices-estimated-load/src/main.py --daemon
+ExecStart=/usr/share/one/cognit-venv/bin/python /usr/lib/one/cognit-devices-estimated-load/src/main.py --daemon --interval 30
 Restart=on-failure
 RestartSec=5
 WorkingDirectory=/usr/lib/one/cognit-devices-estimated-load/src

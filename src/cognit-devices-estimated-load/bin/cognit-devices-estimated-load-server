@@ -72,7 +72,7 @@ start()
 
   # Start the cognit-devices-estimated-load daemon
   touch $COGNIT_ESTLOAD_LOCK_FILE
-  python3 $COGNIT_ESTLOAD_SERVER --daemon >> $COGNIT_ESTLOAD_LOG 2>>$COGNIT_ESTLOAD_LOG_ERROR &
+  python3 $COGNIT_ESTLOAD_SERVER --daemon --interval 30 >> $COGNIT_ESTLOAD_LOG 2>>$COGNIT_ESTLOAD_LOG_ERROR &
   LASTPID=$!
 
   if [ $? -ne 0 ]; then
