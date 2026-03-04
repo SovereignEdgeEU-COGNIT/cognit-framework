@@ -182,6 +182,10 @@
                     <xs:element name="NETTX_BW" type="xs:decimal" minOccurs="0"/>
                     <xs:element name="NETTX_BW_FORECAST" type="xs:decimal" minOccurs="0"/>
                     <xs:element name="NETTX_BW_FORECAST_FAR" type="xs:decimal" minOccurs="0"/>
+                    <xs:element name="POWER" type="xs:integer" minOccurs="0"/>
+                    <!-- ^^ Microwatts, Host power consumption as reported by Scaphandre -->
+                    <xs:element name="POWER_FORECAST" type="xs:decimal" minOccurs="0"/>
+                    <xs:element name="POWER_FORECAST_FAR" type="xs:decimal" minOccurs="0"/>
                   </xs:sequence>
                 </xs:complexType>
               </xs:element>
