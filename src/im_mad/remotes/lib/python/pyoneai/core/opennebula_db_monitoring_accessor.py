@@ -101,6 +101,7 @@ class OpenNebulaDBMonitoringAccessor(BaseMonitoringAccessor):
             "free_memory": "CAPACITY/FREE_MEMORY",
             "netrx": "SYSTEM/NETRX",
             "nettx": "SYSTEM/NETTX",
+            "power": "SYSTEM/POWER",
             # VM metrics
             "cpu": "CPU",
             "memory": "MEMORY",
