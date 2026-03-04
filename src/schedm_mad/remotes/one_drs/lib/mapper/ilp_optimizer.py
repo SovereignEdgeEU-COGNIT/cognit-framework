@@ -158,7 +158,9 @@ class ILPOptimizer(Mapper):
         **kwargs
     ) -> None:
         # Capturing the inputs.
-
+        if criteria == 'energy':
+            criteria = 'contention_with_energy'
+        
         # Current VM ID -> host ID allcations.
         self._curr_alloc = dict(current_placement)
 
