@@ -39,10 +39,9 @@ public:
 
 /**
  *  SystemMonitoring generic host monitoring info
- *  <DS>
- *      <ID>
- *      <FREE_MB>
- *      <USED_MB>
+ *  - CPU_SPEED
+ *  - NETRX / NETTX (and bandwidth forecasts)
+ *  - POWER (microwatts, from Scaphandre) and forecasts
  */
 class SystemMonitoring : public Template
 {

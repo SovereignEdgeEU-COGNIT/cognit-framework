@@ -47,7 +47,10 @@ class OneHostHelper < OpenNebulaHelper::OneHelper
         'NETRX_FORECAST_FAR'  => 'SYSTEM',
         'NETTX'               => 'SYSTEM',
         'NETTX_FORECAST'      => 'SYSTEM',
-        'NETTX_FORECAST_FARR' => 'SYSTEM'
+        'NETTX_FORECAST_FAR'  => 'SYSTEM',
+        'POWER'               => 'SYSTEM',
+        'POWER_FORECAST'      => 'SYSTEM',
+        'POWER_FORECAST_FAR'  => 'SYSTEM'
     }
 
     def self.rname

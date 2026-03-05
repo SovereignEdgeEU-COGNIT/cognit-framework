@@ -79,6 +79,7 @@ int SystemMonitoring::from_template(const Template &tmpl)
         {"CPUSPEED", "CPU_SPEED"},
         {"NETTX",    "NETTX"},
         {"NETRX",    "NETRX"},
+        {"POWER",    "POWER"},
     };
 
     static std::map<std::string, std::string> forecast_map = {
@@ -87,7 +88,9 @@ int SystemMonitoring::from_template(const Template &tmpl)
         {"NETTX_BW_FORECAST_FAR", "NETTX_BW_FORECAST_FAR"},
         {"NETRX_BW",              "NETRX_BW"},
         {"NETRX_BW_FORECAST",     "NETRX_BW_FORECAST"},
-        {"NETRX_BW_FORECAST_FAR", "NETRX_BW_FORECAST_FAR"}
+        {"NETRX_BW_FORECAST_FAR", "NETRX_BW_FORECAST_FAR"},
+        {"POWER_FORECAST",        "POWER_FORECAST"},
+        {"POWER_FORECAST_FAR",    "POWER_FORECAST_FAR"}
     };
 
     get_set<unsigned long>(tmpl, this, system_map);
