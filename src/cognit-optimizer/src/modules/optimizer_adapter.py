@@ -46,7 +46,7 @@ def create_devices_from_assignments(assignments: list[dict]) -> list:
         device = Device(
             id=composite_id,
             load=load,
-            capacity_load=load,
+            capacity_load=1,
             cluster_ids=feasible_cluster_ids
         )
         devices.append(device)
@@ -125,7 +125,8 @@ def run_optimization_with_db_updates() -> tuple | None:
                 flavour = composite_id.split(':::')[1] if ':::' in composite_id else None
                 logger.info(f"Device {device_id} - Flavour {flavour} --> Cluster {cluster_id}")
             
-            scale_clusters_and_update_db(n_vms, allocs, all_feasible_cluster_ids, cluster_lookup)
+            current_cardinality = {c.id: int(c.capacity) for c in clusters}
+            scale_clusters_and_update_db(n_vms, allocs, all_feasible_cluster_ids, cluster_lookup, current_cardinality)
 
         return result
     

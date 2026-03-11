@@ -15,6 +15,8 @@ DEFAULT = {
     'optimizer_update_interval_seconds': 300,
     'optimizer_enabled': True,
     'log_level': 'info',
+    'scale_up_timeout_seconds': 30,
+    'scale_down_timeout_seconds': 360,
 }
 
 FALLBACK_MSG = 'Using default configuration'
@@ -63,3 +65,7 @@ ID_KEY = 'ID'
 OPTIMIZER_ENABLED = config['optimizer_enabled']
 OPTIMIZER_UPDATE_INTERVAL_SECONDS = config['optimizer_update_interval_seconds']
 LOG_LEVEL = config['log_level']
+
+# Scaling timeout configuration
+SCALE_UP_TIMEOUT_SECONDS = config['scale_up_timeout_seconds']
+SCALE_DOWN_TIMEOUT_SECONDS = config['scale_down_timeout_seconds']
