@@ -24,6 +24,9 @@ DEFAULT = {
     'one_db_password': 'opennebula',
     # Estimated load daemon configuration
     'estimated_load_update_interval_seconds': 30,
+    # OpenNebula API credentials (for pyone / OneFlow)
+    'one_api_user': 'oneadmin',
+    'one_api_password': '',
 }
 
 FALLBACK_MSG = 'Using default configuration'
@@ -80,6 +83,10 @@ ONE_DB_PORT = config['one_db_port']
 ONE_DB_DATABASE = config['one_db_database']
 ONE_DB_USER = config['one_db_user']
 ONE_DB_PASSWORD = config['one_db_password']
+
+# OpenNebula API credentials
+ONE_API_USER = config['one_api_user']
+ONE_API_PASSWORD = config['one_api_password']
 
 # Estimated load daemon configuration
 ESTIMATED_LOAD_UPDATE_INTERVAL_SECONDS = config['estimated_load_update_interval_seconds']

@@ -151,6 +151,10 @@ class DBManager:
     ) -> None:
         """Insert new device cluster assignment into database.
 
+        Scales the OneFlow FaaS role for the target cluster by +1 before
+        writing, while holding the write lock to serialise concurrent
+        scale requests.
+
         Args:
             device_id: The device identifier
             cluster_id: The assigned cluster identifier
@@ -159,11 +163,17 @@ class DBManager:
             app_req_json: Application requirements as JSON
         """
         with self._write_lock:
+            import oneflow_scaler
+            if oneflow_scaler.scale_for_new_device(cluster_id):
+                logger.info(f"Scaled OneFlow service for cluster {cluster_id}")
+            else:
+                logger.error(f"Failed to scale OneFlow service for cluster {cluster_id}")
+                
+
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 now = datetime.now().isoformat()
                 app_req_json_str = json.dumps(app_req_json)
-
                 cursor.execute(
                     'INSERT INTO device_cluster_assignment '
                     '(device_id, cluster_id, flavour, last_seen, app_req_id, app_req_json)'
