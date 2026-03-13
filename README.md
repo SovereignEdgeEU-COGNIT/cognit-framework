@@ -6,6 +6,36 @@
 
 [![OpenNebula Architecture](https://opennebula.io/wp-content/uploads/2024/07/03_new_Key-Features.png)](https://opennebula.io/discover/)
 
+## COGNIT Customizations (SovereignEdge.Cognit)
+
+This repository extends the upstream OpenNebula platform with components and modifications developed in the [SovereignEdge.Cognit](https://cognit.sovereignedge.eu/) project (HORIZON-CL4-2022-DATA-01-02) to support an AI-Enabled Adaptive Serverless Framework for the Cognitive Cloud-Edge Continuum.
+
+### COGNIT-specific components
+
+| Component | Description |
+|-----------|-------------|
+| **cognit-frontend** | COGNIT Frontend service: main entry point for device authentication, application requirements, function registry, and Edge Cluster assignment. Integrates with OpenNebula (auth delegation) and uses **Biscuit tokens** for authorization. Reads device-to-cluster assignments from a shared database updated by the cognit-optimizer. |
+| **cognit-optimizer** | AI-Enabled Orchestrator - Multi-Cluster Optimizer for device-to-cluster assignment and Serverless Runtime scaling (MILP, energy/carbon objectives). |
+| **cognit-devices-estimated-load** | Device Load Forecasting daemon: estimates per-device load from OneFlow service metrics (CPU, queue depth). Periodically updates the shared assignment database with estimated load values used by the cognit-optimizer for placement and scaling decisions. |
+
+### Scheduler and Energy-aware policies
+
+| Feature | Description |
+|---------|-------------|
+| **one_drs (DRS) extended for energy** | The Dynamic Resource Scheduler has been extended with **energy-aware** optimization. |
+
+### Monitoring and energy
+
+| Feature | Description |
+|---------|-------------|
+| **Scaphandre monitoring** | Power consumption monitoring via [Scaphandre](https://github.com/hubblo-org/scaphandre): host- and VM-level metrics. Energy data is used for sustainability-aware orchestration and by the Cluster Optimizer.
+
+### Authorization
+
+| Feature | Description |
+|---------|-------------|
+| **Biscuit tokens** | Policy-based authorization using [Biscuit](https://www.biscuitsec.org/) tokens: the COGNIT Frontend issues tokens after authentication; Edge Cluster Frontends and Serverless Runtimes verify tokens for function execution and API access. |
+
 ### To start using OpenNebula
 
 - Explore OpenNebula’s **key features** [on our website](https://opennebula.io/discover).
